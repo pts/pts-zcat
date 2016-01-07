@@ -1,0 +1,1385 @@
+% statecat.psm -- a stateful, faster minimalistic zcat (gzip -cd)
+%   implementation, implemented in pure PostScript LanguageLevel1 (Run
+%   through cpp (C preprocessor) to get the PostScript file
+%
+% by pts@fazekas.hu
+% originally rcm.c
+% original author: Ron McFarland <rcm@one.net>, 1996
+% formally muzcat.c (at Tue Dec 25 11:07:47 CET 2001)
+% based on statecat.ps.3 by pts@fazekas.hu
+% rewritten, restructured and extended at Tue Dec 25 21:00:33 CET 2001
+% translated to PostScript except fvWork at Tue Dec 25 23:11:31 CET 2001
+% translated to PostScript altogether at Thu Dec 27 01:10:58 CET 2001
+% translation works with `cat random.file.gz random.file.gz'' at Thu Dec 27 14:19:36 CET 2001
+% Thu Dec 27 18:37:03 CET 2001:
+%   statecat.ps: 1071960 ms user time (249.293 times slower than gunzip)
+% function inlining at Thu Dec 27 21:51:45 CET 2001
+% shorter keywords at Thu Dec 27 23:52:46 CET 2001
+% at Sat Feb 23 17:05:43 CET 2002:
+%   statecat.ps originally: 5388 bytes
+%   after eliminate-NULLs trick: 5349 bytes
+%   after anti-32768... trick 5229 bytes
+%   5041
+%
+/*
+% Imp: shorter operator names (i.e `E' for `def', as in test_vm_eps.eps)
+% Imp: shorter var names (such as `preread', `past')
+% Imp: make global vars numbered, not named...
+% Imp: make constU[]-3 a string, not an array
+% Imp: make constW, constP, constL strings, not arrays
+% Imp: inline all except fvMktree (too long), fvFree (recursive) and fvWork (too long)
+% OK : verify, examine StateCatDict (45)
+% Imp: find unused vars (such as `moo') in StateCatDict
+% Imp: is constM or 1<< faster??
+% OK : anti-`/z 42 eq', ensure `eq' compares numbers (INT_EQ)
+% OK : verify if/ifelse for ENDIF
+% OK : verify direction of `for's
+% OK : eliminate `stopped' context because it catches errors
+% OK : clear stack before `exit'
+% OK : verify `/name' against `name'; grep m@/@
+% OK : verify that `}' is followed by correct if|ifelse|def|bind|stopped|loop|for
+%
+% Typical error: syntax: /^#/
+% Typical error: syntax: m@/ +\w@
+% Typical error: mispelling
+% Typical error: missing `pop' at `dup ... eq{exit}if'
+% Typical error: missing `for|if|...' after '}'
+*/
+%
+
+#if NDEBUG
+  #define DEBUG(msg)
+  #define ASSERT_TRUE_POP(str) pop
+  #define ASSERT_FALSE_POP(str) pop
+  #define ASSERT_TRUE(what,str)
+  #define ASSERT_INT()
+  #define INT_EQ eq
+  #define INT_NE ne
+  #define DEBUGFORCE(msg)
+#else
+  /InternalError { % <str> FatalError -
+    (%stderr) (w) file dup dup
+      (Internal muZCat Error: ) writestring
+      2 index writestring
+      dup (.\n) writestring
+      flushfile
+      pop
+    quit
+  }bind def
+  /Stderr (%stderr) (w) file def
+  #ifdef DEBUGMSG
+    #define DEBUG(msg) msg Stderr exch writestring Stderr flushfile
+  #else
+    #define DEBUG(msg)
+  #endif
+  #define DEBUGFORCE(msg) msg Stderr exch writestring Stderr flushfile
+  #define ASSERT_TRUE_POP(str) not{ str InternalError }if
+  #define ASSERT_FALSE_POP(str) { str InternalError }if
+  #define ASSERT_TRUE(what,str) what not{ str InternalError }if
+  #define ASSERT_INT(str) dup type/integertype ne{str InternalError}if
+  #define INT_EQ ASSERT_INT((eq2int)) exch ASSERT_INT((eq1int)) exch eq
+  #define INT_NE ASSERT_INT((ne2int)) exch ASSERT_INT((ne1int)) exch ne
+#endif
+
+/TokSubs{ % <earray> toksubs <earray> % minimal speed increase
+  mark exch
+  {
+    dup xcheck{
+      dup type/arraytype eq{
+        TokSubs
+      }{
+        dup type/nametype eq{
+          dup currentdict exch known{
+            % exch get
+            load
+            dup dup type/arraytype eq exch xcheck and{TokSubs aload pop}if
+          }if
+        }if
+      }ifelse
+    }if
+  }forall
+  counttomark array astore exch pop
+  cvx
+}bind def
+/TokBind{
+  TokDict begin TokSubs bind end
+}bind def
+85 dict dup /TokDict exch def begin
+/x{load def}def
+#if CFG_A85D
+/* /A/currentfile x */
+#define currentfile A
+#define Stdin A
+#else
+#define Stdin A
+#endif
+/E/def x
+/c/exch x
+/i/ifelse x
+/O/pop x
+/u/dup x
+/+/add x /* add formerly: `a'. Now: occupied by `packedarray'. */
+/b/bitshift x
+/t/put x
+/y/copy x
+/g/get x
+/X/exit x
+/j/if x
+/r/read x
+/a/packedarray x
+/J 32767 E
+/H 32768 E
+/=/eq x
+/:/for x
+/-/sub x
+/@/loop x
+/,/and x % formerly & (test_statecat2)
+/~/ne x  % formerly ! (test_statecat2)
+/./lt x
+#define lt .
+#define ne ~
+#define and ,
+#define loop @
+#define add +
+#define sub -
+#define for :
+#define eq =
+#define N32767 J
+#define N32768 H
+#define read r
+#define if j
+#define packedarray a
+#define exit X
+#define get g
+#define copy y
+#define bitshift b
+#define put t
+#define dup u
+#define pop O
+#define ifelse i
+#define exch c
+#define def E
+#define mode m
+#define past s
+#define preread P
+#define fvFree fF
+#define fvMktree fM
+#define fvRead fR
+#define fxIgnore8z fZ
+#define fxRead16 C
+#define fxIgnore8 I
+#define fxRead8 R
+#define fxRead8EOF fE
+#define fxSkip fS
+#define noTokBind
+/* constant arrays (lookup tables) */
+#define constW cW
+#define constU cU
+#define constP cP
+#define constQ cQ
+#define constL cL
+#define constM cM
+#define constZ19 cZ
+/constW   16 17 18 0 8 7 9 6 10 5 11 4 12 3 13 2 14 1 15  19 packedarray def
+/constU   3 4 5 6 7 8 9 10 11 13 15 17 19 23 27 31 35 43 51 59 67 83 99 115 131 163 195 227 258  29 packedarray def
+/constP   0 0 0 0 0 0 0 0 1 1 1 1 2 2 2 2 3 3 3 3 4 4 4 4 5 5 5 5 0  29 packedarray def
+/constQ   1 2 3 4 5 7 9 13 17 25 33 49 65 97 129 193 257 385 513 769 1025 1537 2049 3073 4097 6145 8193 12289 16385 24577  30 packedarray def
+/constL   0 0 0 0 1 1 2 2 3 3 4 4 5 5 6 6 7 7 8 8 9 9 10 10 11 11 12 12 13 13  30 packedarray def
+/constM   0 1 3 7 15 31 63 127 255 511 1023 2047 4095 8191  14 packedarray def
+/constZ19 0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0  19 packedarray def
+%%% end % TokDict
+%%% ^^^ StateCatDict and TokDict merged at Sun Mar 17 14:46:50 CET 2002
+
+% /TokBind /bind load def
+
+#define ZZZ_ASET(aname,idx,b) aname idx b put
+#define ZZZ_AREF(aname,idx) aname idx get
+#define PASS
+#define GLOBAL_VAR(t,name) /name 0 def
+#define SLOCAL_VAR(t,name) /name 0 def
+#define GLOBAL_ARRAY(t,name,size) /name size t def
+#define LOCAL_VAR(a,b)
+
+{
+
+%%% 45 dict dup /StateCatDict exch def begin
+%%% ^^^ StateCatDict and TokDict merged at Sun Mar 17 14:46:50 CET 2002
+
+#ifdef CFG_A85D
+/** - d <0..255|511>
+ * Reads a char from `currentfile' as /ASCII85Decode
+ */
+#define sx xS
+#define dx xD
+#define c0 xC
+GLOBAL_VAR(SINT32,sx) /* Variable `xS' was formerly called: `sx' */
+GLOBAL_VAR(SINT32,dx) /* Variable `xD' was formerly called: `dx' */
+GLOBAL_VAR(SINT32,c0) /* Variable `xC' was formerly called: `c0' */
+/d{
+  {27 sx ge{exit}if currentfile read not{511}if dup 122 eq{/sx 27 E/dx 0 E/c0 0
+  E}{dup 117 gt{currentfile read {pop}if/sx 54 sx sub E}{dup 33 ge{sx 32 eq{dup/c0 exch E/dx
+  -1670420001 E}{dup 117 sub{1 85 7225 614125}sx 28 sub get mul dx add/dx exch
+  E}i/sx sx 1 sub E}if}i}i pop}loop sx 22 eq{511}{c0 1868977
+  mul dx add sx 24 and neg bitshift  23 sx lt{c0 3 mul add}if
+  255 and/sx sx 3 eq{32}{sx 7
+  mod 3 eq{22}{sx 8 sub}i}i E}i
+}def
+  #define my_getchar() d
+  #define my_ignorechar() d pop
+  #define fvInitA85d /sx 32 def  /dx 0 def  /c0 0 def
+#else
+  #define my_getchar() Stdin read not{511}if
+  #define my_ignorechar() Stdin read {pop}if
+  #define fvInitA85d
+#endif
+
+#define NULL 0
+#define NODESIZE 1998 /* NODESIZE%3==0 */
+
+
+/** Binary (Huffman) tree of nodes. */
+GLOBAL_ARRAY(array,N,NODESIZE)
+/** Index of the first free node in <code>N</code>. */
+GLOBAL_VAR(WORD,D)
+
+
+/**
+ * Contains the code word lengths used for Huffman code generation in
+ * fvMktree(). 320==288+32. 320 is large enough to hold both the code lengths
+ * of the literal--length (288) and the distance (32) Huffman trees -- and
+ * large enough to hold the auxilary Huffman tree (used for building the
+ * real tree) of length 19.
+ */
+GLOBAL_ARRAY(array,Z,320)
+
+GLOBAL_ARRAY(array,B,17)
+GLOBAL_ARRAY(array,G,17)
+
+/* GLOBAL_VAR(NODEN,no) -- unused */
+/* GLOBAL_VAR(WORD,roo) -- unused */
+/* GLOBAL_VAR(WORD,rf) -- unused */
+/* GLOBAL_VAR(WORD,moo) -- unused */
+/* GLOBAL_VAR(WORD,mo) -- unused */
+/* GLOBAL_VAR(WORD,oooo) -- unused */
+/* GLOBAL_VAR(WORD,x) -- unused */
+GLOBAL_VAR(WORD,mQ)
+GLOBAL_VAR(WORD,mF)
+GLOBAL_VAR(WORD,o)
+GLOBAL_VAR(WORD,q)
+GLOBAL_VAR(WORD,mode) /* MODE_* */
+GLOBAL_VAR(WORD,tY) /* FMT_*; formerly ty */
+GLOBAL_VAR(WORD,oO)
+GLOBAL_VAR(WORD,oP)
+GLOBAL_VAR(WORD,f)
+GLOBAL_VAR(WORD,p)
+GLOBAL_VAR(WORD,v)
+GLOBAL_VAR(WORD,h)
+
+#if CFG_NO_VAR_S
+#else
+GLOBAL_ARRAY(string,S,N32768)
+#endif
+
+#define AREF_S(idx) AREF(S,idx)
+#define ASET_S(idx,val) ASET(S,idx,val)
+
+/* Reading Operations:
+
+-- fxRead8(): read a 8-bit byte at byte boundary
+-- fxRead16z(): read a 16-bit word at byte boundary, MSB first (ZIP)
+-- fxRead16(): read a 16-bit word at byte boundary, LSB first (normal)
+-- fxSkip(): skip to next byte boundary
+-- fxRead1(): read 1 bit (for Huffman)
+-- fvRead(): read any amount of bits (0..13), LSB first
+*/
+
+
+/** char, 0..255 */
+SLOCAL_VAR(WORD,preread)
+/** 0..7: bits of bufread[pos] already read */
+SLOCAL_VAR(WORD,past)
+
+% static void fxInit(void) {
+% /fxInit {
+#define fxInit \
+  /preread my_getchar() def \
+  /past 0 def
+% }noTokBind def
+
+/* #define ASSERT_PREREAD_NOT_EOF() preread 255 gt ASSERT_FALSE_POP((unexpected eof)) */
+#define ASSERT_PREREAD_NOT_EOF() ASSERT_TRUE(preread 255 gt,(non-EOF expected))
+
+/** reads 0..13 bits */
+% static WORD fvRead(WORD arg) {
+/fvRead {
+  DEBUG(dup (==> fvRead\() exch 42 string cvs concatstrings (\)\n) concatstrings)
+  DEBUG((    past=) past neg 42 string cvs concatstrings
+        ( preread=) preread 42 string cvs concatstrings
+        (\n) concatstrings concatstrings)
+  dup 0 INT_NE{
+    ASSERT_PREREAD_NOT_EOF()
+    past
+    % Stack: arg -opast
+    dup preread exch bitshift exch % SHR
+    % Stack: arg preread>>opast opast
+    dup 3 index sub
+    % Stack: arg ret==:preread>>-opast -opast -past==:-opast-arg
+    dup -8 ge{
+      dup -8 INT_EQ{
+        /preread my_getchar() def
+        /past 0 def
+        pop
+      }{
+        /past exch def % BUG fixed at Thu Dec 27 14:53:53 CET 2001
+      }ifelse
+      pop
+      % Stack: arg ret
+    }{
+      ASSERT_TRUE(dup -9 le,(-past>=9))
+      /preread my_getchar() def
+      ASSERT_PREREAD_NOT_EOF()
+      dup -16 gt{ /* _GT_ */
+        8 add /past exch def
+        8 add
+        % Stack: arg ret==:preread>>opast 8-opast
+        preread exch bitshift % SHL
+        add
+        % Stack: arg ret''
+      }{
+        16 add /past exch def
+        8 add 2 copy
+        % Stack: arg retold 8-opast ret 8-opast
+        preread exch bitshift add % SHL
+        % Stack: arg retold 8-opast ret''
+        /preread my_getchar() def % BUG fixed at Thu Dec 27 15:40:53 CET 2001
+        past 0 INT_NE{
+          ASSERT_TRUE(past -4 ge,(past<=4))
+          ASSERT_PREREAD_NOT_EOF()
+          exch 8 add preread exch bitshift add
+          % Stack: arg retold ret''
+        }{
+          exch pop
+        }ifelse
+        exch pop
+        % Stack: arg ret''
+      }ifelse
+    }ifelse
+    % Stack: arg ret
+    exch constM exch get and  % ret&=((1<<arg)-1);
+    % ^^^ BUG (re)-fixed at Thu Dec 27 14:50:49 CET 2001
+  }if
+  DEBUG(dup (<-- fvRead=) exch 42 string cvs concatstrings (\n) concatstrings)
+  % (%stderr) (w) file (<fvRead\n) writestring
+  % fvRead(0)==0 implicitly assumed
+}noTokBind def
+
+% static WORD fxRead1(void) {
+% /fxRead1{
+#define fxRead1 \
+  ASSERT_PREREAD_NOT_EOF() \
+  past dup -7 INT_EQ{ \
+    pop \
+    preread -7 bitshift \
+    /* Stack: ret */ \
+    /preread my_getchar() def \
+    /past 0 def \
+  }{ \
+    dup 1 sub /past exch def \
+    preread exch bitshift 1 and \
+    /* Stack: ret */ \
+  }ifelse
+% }noTokBind def
+
+#if 0 /* inline only speed-critical functions */
+% static void fxSkip(void) {
+% /fxSkip{
+#define fxSkip \
+  past 0 INT_NE{ \
+    ASSERT_PREREAD_NOT_EOF() \
+    /preread my_getchar() def \
+    /past 0 def \
+  }if
+% }noTokBind def
+
+% static WORD fxRead16(void) {
+% /fxRead16{
+#define fxRead16 \
+  ASSERT_TRUE(past 0 INT_EQ,(past==0)) \
+  ASSERT_PREREAD_NOT_EOF() \
+  preread \
+  /* Stack: ret */ \
+  my_getchar() dup /preread exch def \
+  ASSERT_PREREAD_NOT_EOF() \
+  8 bitshift \
+  add \
+  /preread my_getchar() def
+% }noTokBind def
+
+% static WORD fxRead8(void) {
+% /fxRead8{
+#define fxRead8 \
+  ASSERT_TRUE(past 0 INT_EQ,(past==0)) \
+  ASSERT_PREREAD_NOT_EOF() \
+  preread \
+  /* Stack: ret */ \
+  /preread my_getchar() def
+% }noTokBind def
+
+% static void fxIgnore8(WORD how_many_bytes) {
+#define fxIgnore8 \
+  ASSERT_TRUE(dup 0 gt,(fxIgnore8arg>0)) \
+  ASSERT_TRUE(past 0 INT_EQ,(past==0)) \
+  ASSERT_PREREAD_NOT_EOF() \
+  -1 2 {pop my_ignorechar()}for \
+  /preread my_getchar() def
+
+#define fxIgnore8z \
+  ASSERT_TRUE(past 0 INT_EQ,(past==0)) \
+  ASSERT_PREREAD_NOT_EOF() \
+  dup 0 INT_NE{ \
+    -1 2 {pop my_ignorechar()}for \
+    /preread my_getchar() def \
+  }{pop}ifelse
+
+% static WORD fxRead8EOF(void) {
+% /fxRead8EOF{
+#define fxRead8EOF \
+  ASSERT_TRUE(past 0 INT_EQ,(past==0)) \
+  preread \
+  /* Stack: ret */ \
+  /preread my_getchar() def
+% }noTokBind def
+#else
+
+% static void fxSkip(void) {
+/fxSkip{
+  past 0 INT_NE{
+    ASSERT_PREREAD_NOT_EOF()
+    /preread my_getchar() def
+    /past 0 def
+  }if
+}noTokBind def
+
+% static WORD fxRead16(void) {
+/fxRead16{
+  ASSERT_TRUE(past 0 INT_EQ,(past==0))
+  ASSERT_PREREAD_NOT_EOF()
+  preread
+  /* Stack: ret */
+  my_getchar() dup /preread exch def
+  ASSERT_PREREAD_NOT_EOF()
+  8 bitshift
+  add
+  /preread my_getchar() def
+}noTokBind def
+
+% static WORD fxRead8(void) {
+/fxRead8{
+  ASSERT_TRUE(past 0 INT_EQ,(past==0))
+  ASSERT_PREREAD_NOT_EOF()
+  preread
+  /* Stack: ret */
+  /preread my_getchar() def
+}noTokBind def
+
+% static void fxIgnore8(WORD how_many_bytes) {
+/fxIgnore8{
+  ASSERT_TRUE(dup 0 gt,(fxIgnore8arg>0))
+  ASSERT_TRUE(past 0 INT_EQ,(past==0))
+  ASSERT_PREREAD_NOT_EOF()
+  -1 2 {pop my_ignorechar()}for
+  /preread my_getchar() def
+}noTokBind def
+
+/fxIgnore8z{
+  ASSERT_TRUE(past 0 INT_EQ,(past==0))
+  ASSERT_PREREAD_NOT_EOF()
+  dup 0 INT_NE{
+    -1 2 {pop my_ignorechar()}for
+    /preread my_getchar() def
+  }{pop}ifelse
+}noTokBind def
+
+/fxRead8EOF{
+  ASSERT_TRUE(past 0 INT_EQ,(past==0))
+  preread
+  /* Stack: ret */
+  /preread my_getchar() def
+}noTokBind def
+
+#endif
+
+#define fvReadq fvRead
+/** Reads an uint16 from the ZIP file */
+#define fxRead16z fxRead16
+
+/** 
+ * Allocates a new node and initializes it with empty content. This function
+ * lets us get rid of the global variable F (which was buggily uninitialized
+ * in the original scm.c).
+ * @return pointer to the newly allocated node
+ * @whichcode -1
+ */
+% DEFUN_0(NODEN,fvNalloc)
+% /fvNalloc{
+#define fvNalloc \
+  /* GLOBAL_REF(N) */ \
+  /* GLOBAL_REF(D) */ \
+  /* LOCAL_VAR(NODEN,no) */ /* the first/next free node */ \
+  /* FUNCODE */ \
+  D \
+  /* Stack: no */ \
+  ASSERT_TRUE(dup NODESIZE lt,(D<NODESIZE)) \
+  dup N exch get  /D exch def  /* SET(D,AREF(N,no)); % not free anymore */ \
+  dup N exch NULL put  /* ASET(N,no,NULL); */ /* clear; the other two fields are already cleared */ \
+  /* Stack: no */
+% }noTokBind def
+
+/**
+ * Frees the Huffman tree originating from <code>root</code> recursively.
+ * Used <code>I</code> as input only.
+ * Moved <code>I</code> into a argeter.
+ * @param arg root node index in N
+ */
+% DEFUN_1_VOID(fvFree,NODEN)
+/fvFree{
+  % GLOBAL_REF(N)
+  % GLOBAL_REF(D)
+  N exch  dup NULL INT_NE{
+    2 copy       get fvFree
+    2 copy 1 add get fvFree  % fvFree(AREF(N,arg+1));
+    2 copy 1 add NULL put    % ASET(N,arg+1,NULL); /* clear */
+    2 copy 2 add 0 put       % ASET(N,arg+2,0); /* clear */
+    2 copy       D put       % ASET(N,arg,D); /* link to the beginning of the free list */
+    /D exch def  pop         % SET(D,arg); /* set it free */
+  }{
+    % BUG fixed at Thu Dec 27 11:52:59 CET 2001
+    pop pop
+  }ifelse
+}noTokBind def
+
+/**
+ * Goes down (descends) enough levels in the binary tree of (struct node)s.
+ * Reads numbers from input encoded as a Huffman tree represented by the
+ * (struct node)s.
+ * Called only from 2 places.
+ * Used <code>I</code> as both input and output, but the output is never used
+ * in the program. So I've put <code>I</code> to a argument.
+ * @param arg root is only for input
+ * @whichcode 3
+ */
+% DEFUN_1(WORD,fvDescend,NODEN)
+% /fvDescend{
+#define fvDescend \
+  /* GLOBAL_REF(N) */ \
+  /* FUNCODE */ \
+  DEBUG(dup (==> fvDescend\() exch 42 string cvs concatstrings (\)\n) concatstrings) \
+  N exch \
+  { /* Stack: N arg */ \
+    2 copy get NULL INT_EQ{exit}if   /* WHILE(NE(NULL,AREF(N,arg))) */ \
+    2 copy fxRead1 add get exch pop  /* SET(arg,AREF(N,arg+fxRead1())); */ \
+  }loop /* ENDWHILE */ \
+  /* Stack: N arg */ \
+  2 add get \
+  DEBUG(dup (<-- fvDescend=) exch 42 string cvs concatstrings (\n) concatstrings) \
+  /* RETURN(fvDescend,AREF(N,arg+2)) */ /* arg->value; */
+% }noTokBind def
+
+/**
+ * Allocates new (struct node)s. This is the Huffman tree
+ * builder. It reads the global array <code>Z</code>: the code lengths have
+ * been already stored there.
+ * Used <code>I</code> as output only, so I moved it to the return value.
+ * @param arg the number of entries (codes) of the Huffman tree to be built
+ * @return the root of the Huffman tree just built
+ * @whichcode 5
+ */
+% DEFUN_1(NODEN,fvMktree,WORD)
+/fvMktree{  % BUG fixed at Thu Dec 27 11:54:02 CET 2001
+  % GLOBAL_REF(B)
+  % GLOBAL_REF(G)
+  % GLOBAL_REF(N)
+  % GLOBAL_REF(Z)
+  % LOCAL_VAR(WORD,moo)
+  % LOCAL_VAR(WORD,mQ)
+  % LOCAL_VAR(WORD,mo)
+  % LOCAL_VAR(WORD,mF)
+  % FUNCODE
+  constZ19 0 17 getinterval B copy pop % OK to copy packedarray -> array
+  % Stack: arg
+  B Z 0 1  4 index 1 sub
+  % Stack: arg B Z 0 1 arg-1
+  { % Stack: arg B Z moo
+    3 copy get
+    % Stack: arg B Z moo B Z[moo]
+    2 copy get 1 add put
+    % Stack: arg B Z moo
+    pop
+  }for  % WHILE(LT(moo,arg)) INCR(AREF(B,AREF(Z,moo))); INCR(moo); ENDWHILE
+  % Stack: arg B Z
+  pop  0 0 put  % ASET(B,0,0);
+  G 0 0 put  % ASET(G,0,0);
+  % Stack: arg
+  G B 0 1 15   % SET(moo,0); WHILE(LT(moo,16))
+  { % Stack: arg G B moo
+    2 copy get
+    % Stack: arg G B moo B[moo]
+    3 index 2 index get
+    % Stack: arg G B moo B[moo] G[moo]
+    add dup add % BUG fixed at Thu Dec 27 15:05:51 CET 2001
+    % Stack: arg G B moo 2*(B[moo]+G[moo])
+    3 index exch  2 index 1 add exch
+    % Stack: arg G B moo G moo+1 2*(B[moo]+G[moo])
+    % ASET(G, moo+1,TWICE(AREF(G,moo)+AREF(B,moo)));
+    put pop
+  }for % BUG fixed at Thu Dec 27 14:59:52 CET 2001
+  % Stack: arg G B
+  pop pop
+  /* Dat: anode is the ->left pointer of the Sentinel node */
+  N 3 0 put  % ASET(N,3,NULL); /* anode=NULL; */
+  % Stack: arg
+  1 sub 0 exch 1 exch{  % SET(moo,0); WHILE(LT(moo,arg))
+    % Stack: moo
+    dup Z exch get dup 0 INT_NE{  % IF(NZ(AREF(Z,moo)))
+      % Stack: moo Z[moo]
+      % /* WORD o, f; */ /* struct node **f; */
+      dup G exch get /mQ exch def  % SET(mQ,AREF(G,AREF(Z,moo)));
+      % Stack: moo Z[moo]
+      dup G exch 2 copy
+      % Stack: moo Z[moo] G Z[moo] G Z[moo]
+      get 1 add put  % INCR(AREF(G,AREF(Z,moo)));
+      % Stack: moo Z[moo]
+      /mF 3 def % SET(mF,3); /* mF=&anode; */ % BUG fixed at Thu Dec 27 12:03:31 CET 2001
+      % SET(mo,AREF(Z,moo));
+      1 sub  -1 0
+      % Stack: moo Z[moo]-1 -1 0
+      { % WHILE(NZ(mo));  DECR(mo);
+        % Stack: moo mo
+        N mF get NULL INT_EQ{
+          N mF fvNalloc put
+        }if  % IF(EQ(AREF(N,mF),NULL));  ASET(N,mF,fvNalloc NOARGS); ENDIF
+        1 exch bitshift mQ and 0 INT_EQ{0}{1}ifelse
+        N mF get add
+        /mF exch def  % SET(mF,AREF(N,mF)+TAND_P(mQ,SHL(1,mo)));
+        % Stack: moo
+      }for
+      N exch
+      % Stack: N moo
+      N mF 2 copy fvNalloc put  % ASET(N,mF,fvNalloc NOARGS);
+      get 2 add
+      % Stack: N moo AREF(N,mF)+2
+      exch put  % ASET(N,AREF(N,mF)+2,moo); /* (*f)->value=moo; */
+      % Stack: -
+    }{pop pop}ifelse  % ENDIF
+  }for
+  % Stack: -
+  N 3 get
+}noTokBind def
+
+GLOBAL_VAR(WORD,T) /* index (in S) of the first free position, [0..32767] */
+
+#define FMT_ZLIB         120
+#define FMT_STOP         4 /* stop processing and flush STDIN */
+#if CFG_FMT_ZLIB_ONLYX
+#endif
+#define FMT_ZIP_STORED   0 /* file is stored, not Deflated in ZIP file */
+#define FMT_GZIP         31
+#define FMT_NONE         3
+#define FMT_ZIP_DEFLATED 8
+#endif
+
+#define MODE_BOS   0 /* at beginning of (sub)file */
+#define MODE_MOB   1 /* at middle of a DEFLATE block */
+#define MODE_REP   2 /* printing a repeating string in a DEFLATE block */
+#define MODE_BOB   3 /* at the beginning of a block, just before BFINAL and BTYPE */
+#define MODE_COPY1 4 /* copying from input to output (a stored block) */
+#if CFG_FMT_ZLIB_ONLYX
+#else
+#define MODE_ZSTO  5 /* copying from input to output (FMT_ZIP_STORED) */
+#endif
+
+/**
+ * Root of the literal--length Huffman tree in <code>N</code>
+ * (see RFC 1951). Its length is at most 288 with values 0..287. Values
+ * 286 and 287 are invalid. A value in 0..255 means a literal byte, a
+ * value of 256 indicates end-of-block, and a
+ * value in 257..285 is a prefix (with 29 possible values) of a length
+ * in 3..258. See subsubsection 3.2.5 of RFC 1951.
+ */
+SLOCAL_VAR(NODEN,v)
+/**
+ * Root of the distance Huffman tree in <code>N</code> (see RFC 1951).
+ * Its length is at most 32 with values 0..31. Values 30 and 31 are invalid.
+ * A value of 0..29 is a prefix (with 30 possible values) of a distance in
+ * 1..32768. See subsubsection 3.2.5 of RFC 1951.
+ */
+SLOCAL_VAR(NODEN,h)
+
+
+#define SLIDEE dup N32767 INT_EQ{pop 0}{1 add}ifelse
+
+#if CFG_FMT_ZLIB_ONLY
+#define fvAFB /mode MODE_BOS def fxSkip 4 fxIgnore8z
+#else
+% static void fvAFB(void) {
+% /fvAFB{ /* after final block (BFINAL) */
+#define fvAFB \
+  /mode MODE_BOS def  /* SET(mode,MODE_BOS); */ \
+  fxSkip  /* fxSkip(); */ \
+  /* ^^^ skip till we reach byte boundary. fvRead! 0..7 bits */ \
+  tY FMT_GZIP INT_EQ{  /* IF(EQ(tY,FMT_GZIP)) */ \
+    /* CRC32 and ISIZE remaining */ \
+    /* vvv IGNORE fxRead16(); IGNORE fxRead16(); IGNORE fxRead16(); IGNORE fxRead16(); */ \
+    8 \
+  }{ \
+    tY FMT_ZLIB INT_EQ{  /* ELSE_IF(EQ(tY,FMT_ZLIB)) */ \
+      /* ADLER32 remaining */ \
+      4 \
+    }{0}ifelse \
+  }ifelse \
+  fxIgnore8z
+% }noTokBind def
+#endif /* CFG_FMT_ZLIB_ONLY */
+
+/** @return length to be written from S */
+% static WORD fvWork(void) {
+/fvWork{
+  % GLOBAL_REF(J)
+  % GLOBAL_REF(Y)
+  % GLOBAL_REF(T)
+  % GLOBAL_REF(N)
+  % GLOBAL_REF(D)
+  { % `{'': establish fake loop context for return
+    mode MODE_REP INT_EQ{ %  IF(EQ(mode,MODE_REP))
+      ASSERT_TRUE(T 0 INT_EQ,(T==0))
+      ASSERT_TRUE(f 258 le,(f<=258))
+      % /* f==0 is OK now */
+      T oO
+      1 1 f{  % WHILE(NZ(f)) -- inverse for
+        pop
+        % Stack: T oO
+        S 3 copy exch get
+        % Stack: T oO S T S[oO]
+        put  % ASET_S(T,AREF_S(oO));
+        SLIDEE  % SLIDE(oO);
+        exch 1 add exch  % INCR(T);
+        % DECR(f);
+      }for  % ENDWHILE
+      pop /T exch def
+      /mode MODE_MOB def
+    }{
+      mode MODE_COPY1 INT_EQ{  % ELSE_IF(EQ(mode,MODE_COPY1))
+        % /* Now: f: copy count unsinged word16 */
+        ASSERT_TRUE(T 0 INT_EQ,(T==0))
+        % /* f==0 is OK now */
+        f N32767 gt{ /* _GT_ */ % IF((unsigned short)f>=32768)
+          ASSERT_TRUE(f 32768 sub f 32767 and eq,((f&32767)==f-32768))
+          /f f N32767 and def
+          0 1 N32767{  % WHILE(NE((unsigned short)T,32768))
+            S exch fxRead8 put  % ASET_S(T,fxRead8());
+            % INCR(T);
+            % DECR(f);
+          }for  % ENDWHILE
+          /T 0 def  % SET(T,0);
+          % Stack: -
+          ASSERT_TRUE(mode MODE_COPY INT_EQ,(mode==MODE_COPY1))
+          % bbb111
+          N32768 exit  % return (WORD)32768; outside loops
+        }{  % ELSE
+          S T  1 1 f{  % WHILE(NZ(f)) -- inverse for
+            pop
+            % Stack: S T
+            2 copy fxRead8 put  % ASET_S(T,fxRead8());
+            1 add  % INCR(T);
+          }for % ENDWHILE
+          /T exch def  pop
+          % /mode MODE_BOB def  % SET(mode,MODE_BOB); % BUG fixed at Thu Dec 27 14:16:57 CET 2001
+          o 0 INT_NE{  % IF(NZ(o))
+            fvAFB  % goto on_bos; SET(mode,MODE_BOS);
+          }{  % ELSE
+            /mode MODE_BOB def  % SET(mode,MODE_BOB); % beginning of next block
+          }ifelse  % ENDIF
+        }ifelse  % ENDIF
+      }
+#if CFG_FMT_ZLIB_ONLY
+      if
+#else
+       {mode MODE_ZSTO INT_EQ{  % ELSE_IF(EQ(mode,MODE_ZSTO))
+          % /* Now: f: copy count low unsinged word16, oP: high unsigned word16 */
+          % /* Now: oo: 0..1 flag for decrementing oP */
+          ASSERT_TRUE(T 0 INT_EQ,(T==0))
+          % /* f==0 is OK now */
+          f N32767 gt{ /* _GT_ */ % IF((unsigned short)f>=32768)
+            ASSERT_TRUE(f 32768 sub f 32767 and eq,((f&32767)==f-32768))
+            /f f N32767 and def
+            0 1 N32767{  % WHILE(NE((unsigned short)T,32768))
+              S exch fxRead8 put  % ASET_S(T,fxRead8());
+              % INCR(T);
+              % DECR(f);
+            }for  % ENDWHILE
+            /T 0 def  % SET(T,0);
+            % Stack: -
+            ASSERT_TRUE(mode MODE_ZSTO INT_EQ,(mode==MODE_ZSTO))
+            % bbb222
+            N32768 exit  % return (WORD)32768;  outside loops
+          }{
+            oP 0 INT_NE{  % ELSE_IF(NZ(oP))
+              0 1 N32767{  % WHILE(NE((unsigned short)T,32768))
+                S exch fxRead8 put  % ASET_S(T,fxRead8());
+                % INCR(T);
+                % DECR(f);
+              }for  % ENDWHILE
+              /T 0 def  % SET(T,0);
+              % Stack: -
+              oO 0 INT_NE{  % IF(NZ(oO))
+                /oP oP 1 sub def  % DECR(oP);
+                /oO 0 def  % SET(oO,0);
+              }{  % ELSE
+                /oO 1 def  % SET(oO,1);
+              }ifelse
+              ASSERT_TRUE(mode MODE_ZSTO INT_EQ,(mode==MODE_ZSTO))
+              % bbb333
+              N32768 exit  % return (WORD)32768; outside loops
+            }{  % ELSE
+              S T  1 1 f{  % WHILE(NZ(f)) -- inverse for
+                pop
+                % Stack: S T
+                2 copy fxRead8 put  % ASET_S(T,fxRead8());
+                1 add  % INCR(T);
+              }for % ENDWHILE
+              /T exch def   pop
+              /mode MODE_BOS def  % SET(mode,MODE_BOS);
+            }ifelse  % oO!=0
+          }ifelse  % f>=32768
+        }if  % MODE==MODE_ZSTO
+      }ifelse  % MODE==MODE_COPY1
+#endif /* CFG_FMT_ZLIB_ONLY */
+    }ifelse  % MODE==MODE_REP
+    -1 exit % don''t return yet
+  }loop
+  % Stack: retval||-1
+    
+  { % big-big MODE_MOB||MODE_BOB||MODE_BOS loop
+   #ifndef NDEBUG
+    % mode ===only ( big-big\n) print
+   #endif
+    ASSERT_TRUE(mode MODE_MOB INT_EQ  mode MODE_BOB INT_EQ  mode MODE_BOS INT_EQ  or or,(MODE_MOB||MODE_BOB||MODE_BOS))
+
+    % Stack: retval||-1
+    dup -1 INT_NE{%ccc999
+      exit}if
+    mode MODE_MOB INT_EQ{  % IF(EQ(mode,MODE_MOB)); mode_mob:
+      ASSERT_TRUE(dup -1 INT_EQ,(was -1))
+      pop % -1
+      /**
+       * Uncompresses the data block with the Huffman codes set up.
+       *
+       * Reads at most 33 bits per entry. Unfortunately the block can be of
+       * arbitrary length (terminated by an entry of 256).
+       */
+      % /* vvv reads 0..15 bits, see subsubsection 3.2.7 of RFC 1951 */
+      { 
+        % Dat: most of the time is spent inside fvDescend, fvRead and
+        %      inside this loop
+        v fvDescend dup 256 INT_EQ{pop -1 exit}if  % WHILE(NE(oo, 256))
+        dup 257 lt{  % IF(LT(oO,257))
+          % /* ^^^ BUG corrected */
+          S exch T exch put  % ASET_S(T,oO);
+          % Stack: -
+          % vvv SLIDE(T); /* T++; T&=32767; */
+          % vvv if (T==0) return (WORD)32768; /* remain in MODE_MOB */
+          T N32767 INT_EQ{
+            /T 0 def
+            % bbb444
+            N32768 exit % return % in big-big-loop and MOB-loop
+          }if
+          /T T 1 add def
+        }{  % ELSE
+          257 sub  % SUB(oO,257);
+          % Stack: oO
+          dup constU exch get
+          exch constP exch get fvRead
+          add /f exch def  % SET(f,AREF(constU,oO) + fvRead(AREF(constP,oO))); /* fvRead! 0..5 bits */
+          ASSERT_TRUE(3 f le  f 258 le  and,(3<=f && f<=258))
+          h fvDescend  % SET(oO,fvDescend(h));
+          dup constQ exch get
+          exch constL exch get fvRead
+          add  % SET(oO,AREF(constQ,oO) + fvRead(AREF(constL,oO))); /* fvRead! 0..13 bits */
+          T exch sub N32767 and  % /* oO = oO <= T ? T - oO : 32768 - oO + T; */
+
+          f N32768 T sub sub dup 0 lt{ % IF((unsigned short)f<32768-(unsigned short)T)
+            pop
+            % Stack: oO
+            T exch  1 1 f{  % WHILE(NZ(f)) -- inverse for
+              pop
+              % Stack: T oO
+              S 3 copy exch get
+              % Stack: T oO S T S[oO]
+              put  % ASET_S(T,AREF_S(oO));
+              SLIDEE  % SLIDE(oO);
+              exch 1 add exch  % INCR(T);
+              % DECR(f);
+            }for  % ENDWHILE
+            % Dat: oO doesn''t have to be remembered here
+            pop  /T exch def
+            % Stack: -
+            ASSERT_TRUE(T 32768 lt,(T<32768))
+          }{  % ELSE
+            /f exch def % SUB(f,32768-T);
+            % Stack: oO
+            T 1 N32767{  % WHILE(NE((unsigned short)T,32768))
+              % Stack: oO T
+              exch
+              % Stack: T oO
+              S 3 copy exch get
+              % Stack: T oO S T S[oO]
+              put  % ASET_S(T,AREF_S(oO));
+              SLIDEE  % SLIDE(oO);
+              exch pop  % INCR(T);
+            }for  % ENDWHILE
+            /oO exch def
+            % Stack: -
+            /T 0 def  % SET(T,0);
+            /mode MODE_REP def  % SET(mode,MODE_REP);
+            % bbb555
+            N32768 exit % return (WORD)32768; % in big-big-loop and MOB-loop
+          }ifelse  % ENDIF
+        }ifelse  % ENDIF
+      }loop  % ENDWHILE
+      % Stack: retval||-1
+      dup -1 INT_EQ{ % BUG fixed at Thu Dec 27 15:52:18 CET 2001
+        v fvFree  % fvFree(v);
+        h fvFree  % fvFree(h);
+        o 0 INT_NE{  % IF(NZ(o))
+          fvAFB  % goto on_bos; SET(mode,MODE_BOS);
+        }{  % ELSE
+          /mode MODE_BOB def  % SET(mode,MODE_BOB); % beginning of next block
+        }ifelse  % ENDIF
+      }if
+    }if  % ENDIF
+    % Stack: retval||-1
+    dup -1 INT_NE{%ccc888
+      exit}if  pop
+    
+    mode MODE_BOB INT_EQ{  % WHILE(EQ(mode,MODE_BOB)); mode_bob:
+      DEBUG(counttomark 42 string cvs)
+      DEBUG(( kope\n))
+      % assert(mode==MODE_BOB);
+      /o fxRead1  def % SET(o,fxRead1()); /* BFINAL: 1 iff this is the last data block */
+      /q 2 fvRead def % SET(q,fvRead(2)); /* BTYPE: block type; 0=stored, 1=fixed Huff, 2=dyn Huff */
+      % #if NDEBUG
+      % #else
+      %  fprintf(stderr, "MODE_BOB o=%d q=%d %ld\n", o, q, ftell(stdin));
+      % #endif
+      DEBUG((MODE:BOB o=)  o 42 string cvs
+            ( q=) q 42 string cvs
+            ( ) Stdin fileposition 42 string cvs
+            (\n) concatstrings concatstrings concatstrings
+                 concatstrings concatstrings concatstrings)
+      ASSERT_TRUE(q 0 INT_EQ  q 1 INT_EQ  q 2 INT_EQ  or or,(q==0 || q==1 || q==2))
+      q 0 INT_NE{  % IF(NZ(q))
+        /**
+         * Now: q==BTYPE, q==1 or q==2. (BTYPE==3 means error). Handles
+         * compressed data blocks, see subsubsection 3.2.5 of RFC 1951.
+         */
+        q 1 INT_EQ{  % IF(EQ(q,1))
+          /**
+           * Initializes the fixed Huffman codes for BTYPE==1.
+           */
+          % /* WORD oO; */
+          287 -1 0{  % SET(oO,288); WHILE(NZ(oO)); DECR(oO);
+            Z exch  dup 144 lt{8}{dup 256 lt{9}
+              {dup 280 lt{7}{8}ifelse}ifelse}ifelse  put
+            /* ^^^ AREF(Z,oO) = oO < 144 ? 8
+                  : oO < 256 ? 9
+                  : oO < 280 ? 7
+                  : 8; */
+          }for  % ENDWHILE
+          /v 288 fvMktree def  % SET(v,fvMktree(288));
+          0 1 31{Z exch 5 put}for  % SET(f,0); WHILE(LT(f,32)) ASET(Z,f,5); INCR(f); ENDWHILE
+          /h 32 fvMktree def  % SET(h,fvMktree(32));
+        }{  % ELSE
+          /**
+           * Reads dynamic Huffman codes for BTYPE==2.
+           *
+           * Maximum read: 5+5+4+3*19+7*289 == 2094 bits
+           */
+          ASSERT_TRUE(q 2 INT_EQ,(q==2))
+          % /* WORD oO, oP, oPo, f, p, x, v; */
+          /p 5 fvRead 257 add def  % SET(p, fvRead(5) + 257); /* HLIT: 257..286 (287--289 are unused) */
+          /oO 5 fvRead 1 add def  % SET(oO, fvRead(5) + 1); /* HDIST: 1..32 */
+          /v 4 fvRead 4 add def  % SET(v, fvRead(4) + 4); /* HCLEN: 4..19 */ /* small v */
+          constZ19 Z copy pop  % WHILE(LT(oO,19)) ASET(Z,AREF(constW,oO), 0); INCR(oO); ENDWHILE
+          0 1 v 1 sub{
+            Z exch  constW exch get  3 fvRead  put  % WHILE(LT(oO,v))  ASET(Z,AREF(constW,oO), fvRead(3)); INCR(oO); ENDWHILE /* small v */
+          }for
+          % Stack: - (verified)
+          /v 19 fvMktree def  % SET(v,fvMktree(19));
+          /oP 0 def  % SET(oP,0);
+          % Stack: -
+          Z 0 { % SET(oO,0); WHILE(LT(oO,p + oO))
+            % Stack: Z oO
+            dup p oO add ge{exit}if
+            v fvDescend  % SET(oPo,fvDescend(v));
+            % Stack: Z oO oPo
+            dup 16 INT_EQ{
+              pop oP /f 2 fvRead 3 add def  % SET(oPo,oP); SET(f,3+fvRead(2));
+            }{
+              dup 17 INT_EQ{
+                pop 0 /f 3 fvRead 3 add def  % SET(oPo,0); SET(f,3+fvRead(3));
+              }{
+                dup 18 INT_EQ{
+                  pop 0 /f 7 fvRead 11 add def  % SET(oPo,0); SET(f,11+fvRead(7));
+                }{
+                  dup /oP exch def  /f 1 def  % SET(oP,oPo); SET(f,1);
+                }ifelse
+              }ifelse
+            }ifelse
+            % Stack: Z oO oPo
+            1 1 f{ % SET(q,f); WHILE(NZ(q))
+              pop % BUG fixed at Thu Dec 27 12:17:58 CET 2001
+              3 copy put  % ASET(Z,oO,oPo);
+              exch 1 add exch  % INCR(oO);
+              % DECR(q);
+            }for  % ENDWHILE
+            pop % oPo, BUG fixed at Thu Dec 27 12:18:47 CET 2001
+          }loop  % ENDWHILE
+          % Stack: Z oO''==p+oO
+          pop pop
+          v fvFree  % fvFree(v);
+          /v p fvMktree def  % SET(v,fvMktree(p));
+          % Stack: -
+          % /* vvv No need for array copy, just change/pass the pointer to Z... */
+          oO 1 sub -1 0{  % SET(oO'',oO); WHILE(NZ(oO'')) DECR(oO'');
+            Z exch dup
+            % Stack: Z oO'' oO''
+            p add Z exch get  put  % ASET(Z,oO'',AREF(Z,oO'' + p));
+          }for  % ENDWHILE
+          /h oO fvMktree def  % SET(h,fvMktree(x));
+        }ifelse  % ENDIF
+        /mode MODE_MOB def  % SET(mode,MODE_MOB);
+        % goto mode_mob;
+      }{ % ELSE /* inline: fv(..., 7); */
+
+        /**
+         * Copies a block of input to output (mostly) verbatim. This is for
+         * BTYPE==0, non-compressed block, subsubsection 3.2.4 of RFC 1951.
+         * (We need non-compressed because
+         * some blocks cannot be compressed effectively, so gzip inserts them
+         * as is.)
+         * @whichcode 7
+         */
+        fxSkip  % fxSkip();
+        % /* ^^^ skip till we reach byte boundary. fvRead! 0..7 bits */
+        /f fxRead16 def  % SET(f,fxRead16()); /* length of block: 0..65535 */
+        % #if NDEBUG
+        % #else
+        %  fprintf(stderr, "COPY1_BLK=%d T=%d\n", f, T);
+        % #endif
+        2 fxIgnore8  % IGNORE fxRead16(); /* one's complement of length; ignored */
+
+        f N32768 T sub sub dup 0 lt{ % IF((unsigned short)f<32768-(unsigned short)T)
+          pop
+          S T  1 1 f{  % WHILE(NZ(f)) -- inverse for
+            pop
+            % Stack: S T
+            2 copy fxRead8 put  % ASET_S(T,fxRead8());
+            1 add  % INCR(T);
+          }for % ENDWHILE
+          /T exch def  pop
+          ASSERT_TRUE(mode MODE_BOB INT_EQ,(mode==MODE_BOB))
+          ASSERT_TRUE(T 32768 lt,(T<32768))
+        }{  % ELSE
+          % /* Even if f>=32768 */
+          /f exch def % SUB(f,32768-T);
+          T 1 N32767{  % WHILE(NE((unsigned short)T,32768))
+            S exch fxRead8 put  % ASET_S(T,fxRead8());
+            % INCR(T);
+            % DECR(f);
+          }for  % ENDWHILE
+          /T 0 def  % SET(T,0);
+          /mode MODE_COPY1 def  % SET(mode,MODE_REP);
+          % bbb666
+          DEBUG(counttomark 42 string cvs)
+          DEBUG(( whata\n))
+          % trtr
+          ASSERT_TRUE(counttomark 0 eq,(seccounttomark==0))
+          DEBUG((whatb\n))
+          N32768 exit  % return (WORD)32768; % exit from big-big loop
+        }ifelse  % ENDIF
+        o 0 INT_NE{fvAFB}if % IF(NZ(o)); fvAFB(); ENDIF
+        DEBUG( counttomark 42 string cvs)
+        DEBUG((pikula\n))
+      }ifelse  % ENDIF
+    }if  % ENDWHILE /* MODE_BOB */
+    % Stack: -
+  
+    mode MODE_BOS INT_EQ{
+      DEBUG(counttomark 42 string cvs)
+      DEBUG(( booski\n))
+      {
+        DEBUG(counttomark 42 string cvs)
+        DEBUG(( boosbe\n))
+        tY FMT_STOP INT_EQ{ % WHILE(NE(tY,FMT_STOP))
+          T 0 INT_NE{  % /* Flush unwritten buffer. */
+            T% BUG fixed at Thu Dec 27 14:05:32 CET 2001
+            /T 0 def
+            % Stack: T_old
+          }{0}ifelse
+          % ccc777
+          exit % return % in big-big loop and BOS-loop
+        }if
+        % /* SET(oO,0); SET(oP,0); */ /* avoid GCC warnings */
+        % /* fxInit(); */ /* assert(Y==0); SET(J,0); SET(Y,0); */
+        /v NULL def /h NULL def  % SET(v,NULL); SET(h,NULL);
+        % N 0 NULL put  N 1 NULL put  N 2 0 put  % ASET(N,0,NULL); ASET(N,1,NULL); ASET(N,2,0); /* the NULL node is initially empty */
+        % N 3 NULL put  N 4 NULL put  N 5 0 put  % ASET(N,3,NULL); ASET(N,4,NULL); ASET(N,5,0); /* the Sentinel node is initially empty */
+        constZ19 N copy pop % eliminate-NULLs trick: overwrites 1st >=6 elements of N
+        /D 6 def  % SET(D,6); /* first free node is 6. `0' is NULL, `3' is Sentinel */
+        6{  % SET(o,D); 
+          dup NODESIZE ge{pop exit}if  % WHILE (LT(o,NODESIZE))
+          dup N exch dup 3 add put  1 add  % ASET(N,o,o+3);  INCR(o); /* next free node is next node */
+          dup N exch NULL      put  1 add  % ASET(N,o,NULL); INCR(o); /* empty RIGHT */
+          dup N exch 0         put  1 add  % ASET(N,o,0);    INCR(o); /* empty NVAL */
+        }loop  % ENDWHILE
+        % Stack: -
+        fxRead8EOF dup /tY exch def  % SET(tY,fxRead8EOF()); /* read first byte of the header */
+        % tY  kkkkkkkkkk
+        dup 511 INT_EQ{  % IF(EQ(tY,511)) /* EOF */
+          /tY FMT_STOP def  % SET(tY,FMT_STOP);
+        }{
+#if CFG_FMT_ZLIB_ONLY
+          dup FMT_ZLIB INT_EQ{
+            1 fxIgnore8  % IGNORE fxRead8(); /* skip second header byte: 0x01 or 0x5e or 0x9c or 0xda */
+          }if
+#else
+          dup FMT_ZLIB INT_EQ{  % ELSE_IF(EQ(tY,120)) /* ZLIB format */
+            1 fxIgnore8  % IGNORE fxRead8(); /* skip second header byte: 0x01 or 0x5e or 0x9c or 0xda */
+            % /* SET(tY,FMT_ZLIB); */
+          }{
+            dup 80 INT_EQ{  % ELSE_IF(EQ(tY,80)) /* ZIP format */
+              1 fxIgnore8  % IGNORE fxRead8(); /* skip second header byte: 0x48 */
+              /tY FMT_NONE def  % SET(tY,FMT_NONE);
+              fxRead8  % SET(o,fxRead8());
+              dup 3 INT_EQ{ % IF(EQ(o,3)) /* Local file header */
+                % fxRead8 pop   % IGNORE fxRead8(); /* skip: 0x04 */
+                % fxRead16 pop  % IGNORE fxRead16(); /* skip: version needed to extract file (0x0020) */
+                % fxRead16 pop  % IGNORE fxRead16(); /* LOCFLG flags */
+                5 fxIgnore8
+                /tY fxRead8 def  % SET(tY,fxRead8()); /* lower half of compression method */
+                ASSERT_TRUE(tY FMT_ZIP_STORED INT_EQ  tY FMT_ZIP_DEFLATED INT_EQ or,(ty==FMT_ZIP_STORED || ty==FMT_ZIP_DEFLATED))
+                % ^^^ BUG fixed at Thu Dec 27 20:55:52 CET 2001
+                % fxRead8 pop   % IGNORE fxRead8(); /* upper half of compression method */
+                % fxRead16 pop  fxRead16 pop % IGNORE fxRead16(); IGNORE fxRead16(); /* file modification time in MS-DOS format */
+                % fxRead16 pop  fxRead16 pop % IGNORE fxRead16(); IGNORE fxRead16(); /* some kind of CRC-32 */
+                9 fxIgnore8
+                /f   fxRead16z def  % SET(f,  fxRead16z());  /* lower compressed file size */
+                /oP fxRead16z def  % SET(oP,fxRead16z()); /* higher compressed file size */
+                4 fxIgnore8 % fxRead16 pop  fxRead16 pop % IGNORE fxRead16(); IGNORE fxRead16(); /* uncompressed file size */
+                fxRead16z      % SET(oO,fxRead16z()); /* length of filename */      
+                fxRead16z add  % SET(q,fxRead16z()); /* length of extra field */
+                % WHILE(NZ(oO)) IGNORE fxRead8(); DECR(oO); ENDWHILE /* file name */
+                % WHILE(NZ(q)) IGNORE fxRead8(); DECR(q); ENDWHILE /* extra field */
+                % -1 1{fxRead8 pop}for
+                fxIgnore8z
+              }{
+                dup 7 INT_EQ{  % ELSE_IF(EQ(o,7)) /* Extended local header of previous file in ZIP */
+                  % 1 1 13{fxRead8 pop}for  % SET(o,0); WHILE(LT(o,13)) IGNORE fxRead8(); INCR(o); ENDWHILE /* BUGFIX: was 15 */
+                  13 fxIgnore8
+                }{
+                  dup 5 INT_EQ{  % ELSE_IF(EQ(o,5)) /* End of Central Directory Structure in ZIP */
+                    /* fprintf(stderr,"EOCDS\n"); */
+                    % 1 1 17{fxRead8 pop}for  % SET(o,0); WHILE(LT(o,17)) IGNORE fxRead8(); INCR(o); ENDWHILE
+                    17 fxIgnore8
+                    fxRead16z  % SET(o,fxRead16z()); /* CML: archive comment length */
+                    % -1 1{fxRead8 pop}for  % WHILE (NZ(o)) IGNORE fxRead8(); DECR(o); ENDWHILE
+                    fxIgnore8z
+                  }{
+                    dup 1 INT_EQ{  % ELSE_IF(EQ(o,1)) /* Central Directory Structure */
+                      /* fprintf(stderr,"CDS\n"); */
+                      % 1 1 25{fxRead8 pop}for  % SET(oO,0); WHILE(LT(oO,25)) IGNORE fxRead8(); INCR(oO); ENDWHILE
+                      25 fxIgnore8
+                      fxRead16z      % SET(f,fxRead16z()); /* LEN: length of file name */
+                      fxRead16z add  % SET(o,fxRead16z()); /* XLN: length of extra field */
+                      fxRead16z add  % SET(q,fxRead16z()); /* CML: length of file comment */
+                      % fxRead16 pop  fxRead16 pop  fxRead16 pop 
+                      % fxRead16 pop  fxRead16 pop  fxRead16 pop
+                      % ^^^ SET(oO,0); WHILE(LT(oO,12)) IGNORE fxRead8(); INCR(oO); ENDWHILE
+                      12 fxIgnore8
+                      fxIgnore8z
+                      % ^^^ WHILE(NZ(f)) IGNORE fxRead8(); DECR(f); ENDWHILE /* file name */
+                      %     WHILE(NZ(o)) IGNORE fxRead8(); DECR(o); ENDWHILE /* extra field */
+                      %     WHILE(NZ(q)) IGNORE fxRead8(); DECR(q); ENDWHILE /* file comment */
+                    }if % o==1
+                  }ifelse % o==5
+                }ifelse % o==7 
+              }ifelse % o==3   % ENDIF /* IF ZIP structure sub-type */
+              % Stack: tY_old o
+              pop
+            }{
+              dup 31 INT_EQ{  % ELSE_IF(EQ(tY,31)) /* gzip/RFC 1952 format */
+                /* fprintf(stderr,"gzip!\n"); */
+                /* SET(tY,FMT_GZIP); */
+                /* The most simple gzip header (10 bytes): 
+                 * ID1   hex 0x1f == dec 31 == FMT_GZIP
+                 * ID2   hex 0x8b
+                 * CM    hex 0x08
+                 * FLG   hex 0x00
+                 * MTIME hex 0x00, 0x00, 0x00, 0x00 (1 Jan 1970, UNIX epoch)
+                 * XFL   hex 0x00
+                 * OS    hex 0xff
+                 * After that comes the compressed data stream.
+                 * After that comes the CRC32 and ISIZE (byte aligned? ?)
+                 */
+                2 fxIgnore8 % fxRead16 pop  % IGNORE fxRead16(); /* ignore ID2 and CM */
+                % kkkkkkkkkl
+                fxRead8  % SET(o,fxRead8()); /* FLG */
+                % fxRead16 pop  fxRead16 pop  % IGNORE fxRead16(); IGNORE fxRead16(); /* ignore MTIME */
+                % fxRead16 pop  % IGNORE fxRead16(); /* ignore XFL, OS */
+                6 fxIgnore8
+                % Stack: o==FLG
+                dup 2 and 0 INT_NE{  % IF(TAND_P(o,2)) /* GCONT: skip part number of continuation */
+                  %fxRead16 pop  % IGNORE fxRead16();
+                  2 fxIgnore8
+                }if  % ENDIF
+                dup 4 and 0 INT_NE{  % IF(TAND_P(o,4)) /* ignore FEXTRA */
+                  fxRead16 fxIgnore8
+                  % 1 1 fxRead16{fxRead8 pop}for
+                  % SET(q,fxRead16());
+                  % WHILE(NZ(q)) IGNORE fxRead8(); DECR(q); ENDWHILE
+                }if  % ENDIF
+                dup 8 and 0 INT_NE{  % IF(TAND_P(o,8))
+                  {fxRead8 0 INT_EQ{exit}if}loop  % WHILE(NZ(fxRead8())); PASS; ENDWHILE
+                }if  % ENDIF /* ignore FNAME */
+                dup 17 and 0 INT_NE{  % IF(TAND_P(o,16))
+                  {fxRead8 0 INT_EQ{exit}if}loop  % WHILE(NZ(fxRead8())); PASS; ENDWHILE
+                }if  % ENDIF /* ignore FCOMMENT */
+                dup 32 and 0 INT_NE{  % IF(TAND_P(o,32)) /* skip encryption header */
+                  % fxRead16 pop  fxRead16 pop  fxRead16 pop 
+                  % fxRead16 pop  fxRead16 pop  fxRead16 pop
+                  % SET(f,0); WHILE(LT(f,12)) IGNORE fxRead8(); INCR(f); ENDWHILE
+                  12 fxIgnore8
+                }if  % ENDIF
+                % Stack: tY o
+                pop
+              }if % tY==31 (gzip/RFC 1952 format)
+            }ifelse % tY==80 (ZIP format)
+          }ifelse % tY==FMT_ZLIB
+#endif /* CFG_FMT_ZLIB_ONLY */
+        }ifelse % tY==511  % ENDIF /* IF file format */
+        % Stack: tY_old
+        pop
+        % /* fprintf(stderr,"tY=%d\n", tY); */
+        % tY bbbbbc
+#if CFG_FMT_ZLIB_ONLYX
+          tY FMT_STOP INT_NE {
+            /mode MODE_BOB def  % SET(mode,MODE_BOB);
+            -1 exit  % goto mode_bob;
+          }if
+#else
+        tY FMT_ZIP_STORED INT_EQ{  % IF(EQ(tY,FMT_ZIP_STORED))
+          % /* fprintf(stderr,"ZIP_STORED oO=%d oP=%d\n", oO, oP); */
+          /oO 0 def  % SET(oO,0);
+          f N32768 T sub sub dup 0 lt{ % IF((unsigned short)f<32768-(unsigned short)T)
+            pop
+            S T  1 1 f{  % WHILE(NZ(f)) -- inverse for
+              pop
+              % Stack: S T
+              2 copy fxRead8 put  % ASET_S(T,fxRead8());
+              1 add  % INCR(T);
+            }for % ENDWHILE
+            /T exch def  pop
+            ASSERT_TRUE(T 32768 lt,(T<32768))
+            oP 0 INT_NE{
+              /mode MODE_ZSTO def
+              % ccc555
+              T exit  % in big-big loop and BOS-loop
+            }if
+            % ^^^ IF(NZ(oP));  mode=MODE_ZSTO;  return T;  ENDIF
+            ASSERT_TRUE(mode MODE_BOS INT_EQ,(mode==MODE_BOS))
+          }{  % ELSE
+            % /* Even if f>=32768 */
+            /f exch def % SUB(f,32768-T);
+            T 1 N32767{  % WHILE(NE((unsigned short)T,32768))
+              S exch fxRead8 put  % ASET_S(T,fxRead8());
+              % INCR(T);
+              % DECR(f);
+            }for  % ENDWHILE
+            /T 0 def  % SET(T,0);
+            /mode MODE_ZSTO def  % SET(mode,MODE_REP);
+            % bbb777
+            N32768 exit  % return (WORD)32768; % in big-big loop and BOS-loop
+          }ifelse  % ENDIF
+        }{
+          tY FMT_STOP INT_NE  tY FMT_NONE INT_NE and{
+            /mode MODE_BOB def  % SET(mode,MODE_BOB);
+            -1 exit  % goto mode_bob;
+          }if
+        }ifelse  % ENDIF
+#endif /* CFG_FMT_ZLIB_ONLY */
+      }loop  % ENDWHILE /* outermost WHILE(NE(tY,FMT_STOP)) */
+      % Stack: retval
+    }{-1}ifelse % mode==MODE_BOS
+    % Stack: retval
+  }loop % big-big MODE_MOB||MODE_BOB||MODE_BOS loop
+  % Stack: retval
+}noTokBind def  % ENDFUN
+
+
+% Stdin already set
+% /fvInitAll{
+#define fvInitAll \
+  fxInit \
+  /tY FMT_NONE def \
+  /mode MODE_BOS def \
+  /T 0 def /* make the round buffer empty */ \
+  fvInitA85d
+% }noTokBind def
+
+%%% end % StateCatDict
+%%% ^^^ StateCatDict and TokDict merged at Sun Mar 17 14:46:50 CET 2002
+
+}TokBind exec
+
+#define StateCatDict TokDict
+
+% int main(int argc, char **argv) {
+
+{ StateCatDict begin
+  /Stdin (%stdin) (r) file def % default binary mode??
+  fvInitAll
+#ifdef NDEBUGGG
+  S 0 {
+    fvWork dup 0 INT_EQ{exit}if
+    3 copy getinterval
+    print % Write string to STDOUT verbatim
+    pop
+  }loop
+  % Stack: S 0
+  pop pop  
+#else
+#ifdef CFG_A85DX
+  /OF 34 E % skip PBM header
+#endif
+  mark {
+    fvWork
+    % DEBUG(counttomark 42 string cvs (counttomark=) exch concatstrings (\n) concatstrings)
+    ASSERT_TRUE(counttomark 1 eq,(counttomark==1))
+    DEBUG(dup 42 string cvs (written=) exch concatstrings (\n) concatstrings)
+    dup 0 INT_EQ{pop exit}if
+#ifdef CFG_A85DX
+    S exch OF exch OF sub getinterval
+    /OF 0 def
+#else
+    S exch 0 exch getinterval
+#endif
+    print % Write string to STDOUT verbatim
+  }loop
+  % Stack: mark
+  pop
+#endif
+  currentdict { pop 42 string cvs (\n) concatstrings DEBUGFORCE(null pop) } forall
+  end % StateCatDict/TokDict
+}TokBind exec
+
+% /* __END__ */

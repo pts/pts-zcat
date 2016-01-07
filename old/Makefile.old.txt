@@ -1,0 +1,193 @@
+#
+# Makefile -- union of compile_*.sh
+# by pts@fazekas.hu at Sat Jun 29 17:35:13 CEST 2002
+#
+
+TARGETS=java ansioc ansics ansicxx oc ruby ansiclnx statecat_ansic python \
+  knrc ansic gawk pike ansicsys isopascal freepascal xpascal turbopascal \
+  perl gnu_bc ansic_checker
+BAD_TARGETS=
+
+gnu_bc_bins=zcat.bc
+java_bins=ZCat.java ZCat.class
+gawk_bins=zcat.gawk
+ansioc_bins=ansioc.bin zcat.c
+ansic_checker_bins=ansic_checker.bin zcat.c
+ansics_bins=ansics.bin zcat.c
+ansic_bins=ansic.bin zcat.c
+ansicsys_bins=ansicsys.bin zcat.c
+ansiclnx_bins=ansiclnx.bin zcat.c
+ansicxx_bins=ansicxx.bin zcat.c
+knrc_bins=knrc.bin zcat.c
+oc_bins=zcat.oc zcat.oo august
+ruby_bins=zcat.rb
+statecat_ansic_bins=statecat_ansic.bin
+python_bins=zcat.py
+pike_bins=zcat.pike
+perl_bins=zcat.pl
+isopascal_bins=zcat.pas isopascal.bin
+freepascal_bins=zcat.pas freepascal.bin
+xpascal_bins=zcat.pas xpascal.bin
+turbopascal_bins=zcat.pas
+
+.PHONY: $(TARGETS) clean default
+
+default:
+	@echo 'make one of: $(TARGETS)'
+
+clean:
+	rm -f DEADJOE core a.out test.tmp zcat.o
+	rm -f $(foreach TARGET,$(TARGETS),$($(TARGET)_bins))
+
+# 2001.12.27
+java: ZCat.class
+	bash ./test.sh 'java ZCat'
+ZCat.java: muzcat.c
+	cpp -DCFG_LANG_JAVA=1 -E muzcat.c | perl -ne 'print if!/^#/&&/\S/' >ZCat.java
+ZCat.class: ZCat.java
+	javac ZCat.java
+
+# by pts@fazekas.hu at Tue Jul 24 20:27:35 CEST 2001
+perl zcat.pl: muzcat.c
+	cpp -DCFG_LANG_PERL=1 -E muzcat.c | perl -ne 'print if!/^#/&&/\S/' >zcat.pl
+	bash ./test.sh 'perl zcat.pl'
+
+# by pts@fazekas.hu at Sun Jun 30 00:08:13 CEST 2002
+pike zcat.pike: muzcat.c
+	cpp -DCFG_LANG_PIKE=1 -E muzcat.c | perl -ne 'print if!/^#/&&/\S/' >zcat.pike
+	bash ./test.sh 'pike zcat.pike'
+
+# works since (by pts@fazekas.hu) Sun Jun 30 00:09:49 CEST 2002
+gawk zcat.gawk: muzcat.c
+	# vvv gawk is newline-sensitive, so we remove \n before comma and close-paren from the code
+	cpp -DCFG_LANG_GAWK=1 -E muzcat.c | perl -e '$$O=""; for(<STDIN>){$$O.=$$_ if!/^#/&&/\S/} $$O=~s@\s+([,()])@$$1@g; print $$O' >zcat.gawk
+	bash ./test.sh 'gawk -f zcat.gawk'
+
+# 2001.12.27
+ansioc ansioc.bin: muzcat.c
+	echo '#include <stdio.h>' >zcat.c
+	cpp -DCFG_LANG_OC=1 -E muzcat.c | perl -pe 'exit if/enddot2/' | grep -v '^#' | grep -v '^ *$$' >>zcat.c
+	# ^^^ enddot2: avoid nasty CPP/GCC bug (??)
+	gcc -o ./ansioc.bin -s -O3 -DCFG_LANG_OC=1 -ansi -pedantic -W -Wall -Wtraditional -Wnested-externs -Wpointer-arith -Wbad-function-cast -Wcast-qual -Winline zcat.c
+	bash ./test.sh ./ansioc.bin
+
+# 2001.12.27
+ansics ansics.bin: muzcat.c
+	gcc -o ./ansics.bin -s -O3 -DCFG_LANG_ANSIC_SIGNED=1 -ansi -pedantic -W -Wall -Wstrict-prototypes -Wtraditional -Wnested-externs -Wpointer-arith -Wbad-function-cast -Wcast-qual -Wmissing-prototypes -Winline -Wmissing-declarations muzcat.c
+	bash ./test.sh ./ansics.bin
+
+# by pts@fazekas.hu at Sat Jul 28 12:25:11 CEST 2001
+# formerly compile_cpp.sh
+ansicxx ansicxx.bin: muzcat.c
+	g++ -o ansicxx.bin -s -O3 -DCFG_LANG_ANSIC=1 -ansi -pedantic -W -Wall -Wstrict-prototypes -Wtraditional -Wnested-externs -Wpointer-arith -Wbad-function-cast -Wcast-qual -Wmissing-prototypes -Winline -Wmissing-declarations muzcat.c
+	bash ./test.sh ./ansicxx.bin
+
+# 2002.12.27
+oc zcat.oc zcat.oo: muzcat.c august
+	cpp -DCFG_LANG_OC=1 -E muzcat.c | perl -pe 'exit if/enddot2/' | grep -v '^#' | grep -v '^ *$$' >zcat.oc
+	# ^^^ enddot2: avoid nasty CPP/GCC bug
+	cat august.c zcat.oc | ./august >zcat.oo
+	bash ./test.sh 'cat zcat.oo - | ./august'
+august: august.c
+	gcc -ansi -O -DZ=48000 -D'T=m[s]' -D'P=m[s++]' \
+	    -D'L=m[p++]' -D'g=getchar()' -DE=else -DW=while -D'B=m[p++]' \
+	    -DI=if -DR='s=s+l/2;T=r;I(l%2)s++' -D'X=m[s-' \
+	    -D'D=Q(13,-)Q(14,*)Q(15,/)Q(16,%)Q(6,==)Q(7,!=)Q(8,<)C(1,r=P;m[T]=r;T=r)C(9,r=P;m[T]=r;s++)' \
+	    august.c -o august
+
+# by pts@fazekas.hu at Sat Jul 28 13:03:09 CEST 2001
+ruby zcat.rb: muzcat.c
+#	cpp -DCFG_LANG_RUBY=1 -E muzcat.c | grep -v '^#' | grep -v '^ *$$' | \
+#	  ruby -pe '$$_.gsub!(/\$$ */,"\$$")' >zcat.rb
+	cpp -DCFG_LANG_RUBY=1 -E muzcat.c | \
+	  ruby -ne '$$_.gsub!(/\$$ */,"\$$"); $$_.gsub!(/ *\( */,"("); print if !/^#/ and !/^ *$$/' >zcat.rb
+	bash ./test.sh 'ruby -w zcat.rb'
+
+# by pts@fazekas.hu at Sat Jul 28 00:57:26 CEST 2001
+ansiclnx ansiclnx.bin: muzcat.c
+	# no -ansi, allow `inline' in unistd.h
+	# no -pedantic, because a lot of `inline' warnings
+	gcc -static -c -s -O3 -DCFG_LANG_ANSIC_LINUX=1 -W -Wall -Wstrict-prototypes -Wtraditional -Wnested-externs -Wpointer-arith -Wbad-function-cast -Wcast-qual -Wmissing-prototypes -Winline -Wmissing-declarations muzcat.c
+	# ^^^ -Wl,-e,_niam_ wouldn't be enough, because we have to avoid crt*o
+	ld -e _niam_ muzcat.o -o ansiclnx.bin
+	bash ./test.sh ./ansiclnx.bin
+
+statecat_ansic statecat_ansic.bin: statecat.c
+	gcc -o statecat_ansic.bin -s -O3 -DNDEBUG -DCFG_LANG_ANSIC_SIGNED=1 -ansi -pedantic -W -Wall -Wstrict-prototypes -Wtraditional -Wnested-externs -Wpointer-arith -Wbad-function-cast -Wcast-qual -Wmissing-prototypes -Winline -Wmissing-declarations statecat.c
+	bash ./test.sh ./statecat_ansic.bin
+
+python zcat.py: muzcat.c
+	cpp -DCFG_LANG_PYTHON=1 -E muzcat.c | grep -v '^#' | grep -v '^ *$$' | \
+	  perl -pe 's/;+\s*while/\nwhile/' | \
+	  perl -ne ' s/^[ \t]*(\}[ \t]*)?/if(length$$1){substr($$D,-2,2)=""};$$D/e;  s/\s*([{}])[ \t]*/if($$1eq"{"){$$D.="  "}else{  substr($$D,-2,2)=""}""/ge; next if /\A[\s;]*\Z/;  print' >zcat.py
+	bash ./test.sh 'python zcat.py'
+
+# Fri Jul 12 20:03:22 CEST 2002
+gnu_bc zcat.bc: muzcat.c
+	cpp -DCFG_LANG_BC=1 -E muzcat.c | perl -e '$$_=join"",<STDIN>; \
+	  s@#.*@@g; \
+	  s@\s+@ @g; s@\s*;+\s*@;\n@g; s@\{\s*(;\s*)?@{\n@g; s@}\s*@}\n@g; \
+	  s@}\s*else@} else@g; s@ *([\[\];:=()]) *@$$1@g; print' >zcat.bc
+	bash ./test.sh 'perl -pe '\''s@(.)@sprintf"%d ",ord$$1@ges;'\'' | \
+ 	bc zcat.bc | \
+	perl -e '\''$$_=join"",<STDIN>;y@0-9 \n@@cd; for(split" ",$$_){print chr}'\'
+
+#	bash ./test.sh 'perl -pe '\''s@(.)@sprintf"%02d ",ord$$1@ges;'\'' \
+#	| bc zcat.bc | \
+#	perl -ne '\''@L=split" ",<STDIN>;for(@L){print chr}'\'
+
+
+
+
+# 2001.12.27
+knrc knrc.bin: muzcat.c
+	gcc -o knrc.bin -s -O3 -DCFG_LANG_KNRC=1 -traditional -pedantic -W -Wall -Wtraditional -Wnested-externs -Wpointer-arith -Wbad-function-cast -Wcast-qual -Wmissing-prototypes -Winline -Wmissing-declarations muzcat.c
+	bash ./test.sh ./knrc.bin
+
+# 2001.12.27
+ansic ansic.bin: muzcat.c
+	gcc -o ansic.bin -s -O3 -DCFG_LANG_ANSIC=1 -ansi -pedantic -W -Wall -Wstrict-prototypes -Wtraditional -Wnested-externs -Wpointer-arith -Wbad-function-cast -Wcast-qual -Wmissing-prototypes -Winline -Wmissing-declarations muzcat.c
+	bash ./test.sh ./ansic.bin
+
+# Fri Jul 12 20:51:37 CEST 2002
+ansic_checker ansic_checker.bin: muzcat.c
+	checkergcc -o ansic_checker.bin -s -O3 -DCFG_LANG_ANSIC=1 -ansi -pedantic -W -Wall -Wstrict-prototypes -Wtraditional -Wnested-externs -Wpointer-arith -Wbad-function-cast -Wcast-qual -Wmissing-prototypes -Winline -Wmissing-declarations muzcat.c
+	bash ./test.sh ./ansic_checker.bin
+
+# by pts@fazekas.hu at Sat Jul 28 00:35:21 CEST 2001
+ansicsys ansicsys.bin: muzcat.c
+	gcc -o ansicsys.bin -s -O3 -DCFG_LANG_ANSIC_SYSCALL=1 -ansi -pedantic -W -Wall -Wstrict-prototypes -Wtraditional -Wnested-externs -Wpointer-arith -Wbad-function-cast -Wcast-qual -Wmissing-prototypes -Winline -Wmissing-declarations muzcat.c
+	bash ./test.sh ./ansicsys.bin
+
+# by pts@fazekas.hu at Sun Jul 29 12:06:26 CEST 2001
+# Sun Jun 30 22:00:36 CEST 2002
+# /usr/lib/fpc/0.99.10/
+isopascal isopascal.bin: muzcat.c
+        # vvv don't emit too long lines
+	cpp -DCFG_LANG_ISOPASCAL=1 -E muzcat.c | perl -ne 's@\s*;;;@\n@g; s@ *([\[\];:=()]) *@$$1@g; print if!/^#/&&/\S/' >zcat.pas
+	gpc zcat.pas -O3 -s -Wall -W -Wpointer-arith -Wbad-function-cast -Wcast-qual -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations -Winline --pedantic --standard-pascal-level-0 -oisopascal.bin
+	bash ./test.sh ./isopascal.bin
+
+# by pts@fazekas.hu at Sun Jun 30 22:00:51 CEST 2002
+xpascal xpascal.bin: muzcat.c
+        # vvv don't emit too long lines because of Turbo Pascal
+	cpp -DCFG_LANG_XPASCAL=1 -E muzcat.c | perl -ne 's@\s*;;;@\n@g; s@ *([\[\];:=()]) *@$$1@g; print if!/^#/&&/\S/' >zcat.pas
+	gpc zcat.pas -O3 -s -Wall -W -Wpointer-arith -Wbad-function-cast -Wcast-qual -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations -Winline --pedantic -oxpascal.bin
+	bash ./test.sh ./xpascal.bin
+
+# by pts@fazekas.hu at Sun Jun 30 23:57:31 CEST 2002
+turbopascal: muzcat.c
+        # vvv don't emit too long lines because of Turbo Pascal
+	cpp -DCFG_LANG_TURBOPASCAL=1 -E muzcat.c | perl -ne 's@\s*;;;@\n@g; s@ *([\[\];:=()]) *@$$1@g; print if!/^#/&&/\S/' >zcat.pas
+	@echo "Now go and compile zcat.pas with Turbo Pascal. Try I/O redirect."
+
+# by pts@fazekas.hu at Sun Jul 29 12:06:26 CEST 2001
+# /usr/lib/fpc/0.99.10/
+freepascal zcat.pas freepascal.bin: muzcat.c
+        # vvv don't emit too long lines
+	cpp -DCFG_LANG_FREEPASCAL=1 -E muzcat.c | perl -ne 's@\s*;;;@\n@g; s@ *([\[\];:=()]) *@$$1@g; print if!/^#/&&/\S/' >zcat.pas
+	ppc386 -O3 -vewnhi -Cx -Xs -oa zcat.pas
+	mv -f a freepascal.bin
+	bash ./test.sh ./freepascal.bin
+
+# __END__ of Makefile

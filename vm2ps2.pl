@@ -1,0 +1,173 @@
+#!/usr/local/bin/perl -w
+# vm2ps2.pl
+# by pts@fazekas.hu at Sat Jul 28 18:10:12 CEST 2001
+use integer;
+use strict;
+# OK : check 20000 -- only for muzcat
+
+#die "$0: compile: $?\n" if system('
+#  set -xe
+#  gcc parsee.c -o parsee
+#  cpp -DCFG_LANG_OC=1 -E muzcat.c | perl -pe "exit if/enddot2/" | grep -v "^#" | grep -v '^ *$' >zcat.oc
+#  ./parsee <zcat.oc >zcat.eo
+#')>>8;
+#die "$0: gcc: $?\n" if system("gcc vm2ps.c -o vm2ps")>>8;
+#die "$0: popen: $!\n" unless open PIPE, "./vm2ps <zcat.eo|";
+die unless open PIPE, "<&STDIN";
+my %at2idx;
+my @all;
+my %targets;
+my $NEXTP=0;
+while (<PIPE>) {
+  die "$0: syntax error in $.: $_" unless /^@ *(\d+):? *(\d*) *([A-Z]+)$/;
+  my($NN,$OC)=($2,$3);
+  if ($OC eq'PUSH' and $NN>=20000 and $NN<27000) {
+    $OC='PUSHF';
+    $NN-=20000;
+  }
+  push @all, [$OC,$NN];
+  $at2idx{$1}=$#all;
+  if (($OC eq'JZ' or $OC eq'JMP' or $OC eq 'PUSHF') and $NN>=2) { $targets{$NN}=1 }
+  $targets{$1}=1 if $NEXTP;
+  $NEXTP=($OC eq'JZ' or $OC eq'JMP' or $OC eq 'HALT' or $OC eq 'RET' or $OC eq 'FUNCALL');
+#  print;
+}
+
+print STDERR "ALL $#all\n";
+
+my %targetidxs;
+my $targetc=3; # !!
+for my $TAT (sort {$a<=>$b} keys%targets) {
+  if (exists $at2idx{$TAT}) {
+    $targetidxs{$at2idx{$TAT}}=$targetc++;
+    # $idx2target{$targetc}=$at2idx{$TAT};
+  } else {
+    print STDERR "$0: at not found (unreachable??): $TAT\n"
+  }
+}
+
+my $HAVE_NO_MODIFIED_OPS=0;
+
+my $LABN=3;   # next label
+my $EXITED=0; # code exited from this label;
+my $EXTRA=""; # extra code at end of block
+
+print "{} {} {\n";
+for (my $I=0;$I<=$#all;$I++) {
+  if (exists $targetidxs{$I}) {
+    print "  $LABN % exitfall\n" unless $EXITED;
+    print "$EXTRA} { % label $targetidxs{$I}:\n";
+    $LABN=$targetidxs{$I}+1;
+    $EXITED=0;
+    $EXTRA="";
+  }
+  # die unless defined $all[$I][1];
+  next if $EXITED;
+  my($Z)=$all[$I][1];
+  ### Using Ram[0] etc.
+  if ($all[$I][0]eq'JZ' or $all[$I][0]eq'PUSHF' or $all[$I][0]eq'JMP') {
+    if ($all[$I][1]==0) {
+      # $all[$I]=['GETCHAR',''];
+      $all[$I]=['PUSHF',0];
+    } elsif ($all[$I][1]==1) {
+      # $all[$I]=['PUTCHAR',''];
+      $all[$I]=['PUSHF',1];
+    } elsif (exists $targets{$all[$I][1]} and exists $at2idx{$all[$I][1]}) {
+      $all[$I][1]=$targetidxs{$at2idx{$all[$I][1]}};
+      $all[$I][1]="unknown" unless defined $all[$I][1];
+    } else {
+      print STDERR "$0: target not found (unreachable??): $all[$I][1]\n";
+      $all[$I][0]='UNREACH';
+    }
+    # $all[$I][0]='ZZZ';
+  }
+  die unless defined $all[$I][1];
+  my($OC)=$all[$I][0];
+       if ($OC eq'ADD') {
+    print "  add\n";
+  } elsif ($OC eq'UNREACH') {
+    print "  .err.unreach. % $all[$I][1]\n";
+  } elsif ($OC eq'IDIV') {
+    if ($HAVE_NO_MODIFIED_OPS) { print "  idiv\n" }
+    else {
+      # print "  .err.idiv\n"
+      # Emulation of get/put `char S[32768]'.
+      print "  emudiv\n";
+    }
+  } elsif ($OC eq'IMUL') {
+    if ($HAVE_NO_MODIFIED_OPS) { print "  mul\n" }
+                          else { print "  bitshift\n" }
+  } elsif ($OC eq'IREM') {
+    if ($HAVE_NO_MODIFIED_OPS) { print "  mod\n" }
+                          else { print "  and\n" }
+    # `-7 256 mod' == `-7', but `-7 255 and' == 249
+  } elsif ($OC eq'LT') {
+    print "  lt\n";
+  } elsif ($OC eq'EQ') {
+    print "  eq\n";
+  } elsif ($OC eq'NE') {
+    print "  ne\n";
+  } elsif ($OC eq'SUB') {
+    print "  sub\n";
+  } elsif ($OC eq'GET') {
+    ### print "  Ram exch get\n";
+    print "  xload\n";
+  } elsif ($OC eq'GETINC') {
+    ### print "  Ram exch dup Ram exch get 1 add put 0\n";
+    print "  dup xload 1 add xdef 0\n";
+  } elsif ($OC eq'GETDEC') {
+    ### print "  Ram exch dup Ram exch get 1 sub put 0\n";
+    print "  dup xload 1 sub xdef 0\n";
+  } elsif ($OC eq'SET') {
+    ### print "  Ram 3 1 roll put\n";
+    print "  xdef\n";
+  } elsif ($OC eq'GETSET') {
+    ### print "  dup Ram 4 2 roll put\n";
+    print "  dup 3 1 roll xdef\n" ### need
+  } elsif ($OC eq'NEG') {
+    print "  neg\n";
+  } elsif ($OC eq'NOT') {
+    print "  not\n";
+  } elsif ($OC eq'HALT') {
+    print "  1 % exit\n";
+    $EXITED=1;
+  } elsif ($OC eq'POP') {
+    print "  pop\n";
+  } elsif ($OC eq'PUSH') {
+    print "  $all[$I][1]\n";
+  } elsif ($OC eq'RET') {
+    print "  2 % exit\n";
+    $EXITED=1;
+  } elsif ($OC eq'FUNCALL' and $all[$I][1]==0) {
+    print "  0 exch % exit\n";
+    $EXITED=1;
+  } elsif ($OC eq'FUNCALL' and $all[$I][1]==2) {
+    print "  exch % exit\n";
+    $EXITED=1;
+  } elsif ($OC eq'PUSHGADR') {
+    print "  ".(1+$all[$I][1])." % PUSHGADR\n";
+  } elsif ($OC eq'PUSHF') {
+    ### print "  -".($all[$I][1])." % PUSHF\n";
+    print "  ".(-$all[$I][1])." % PUSHF\n";
+  } elsif ($OC eq'JMP') {
+    print "  $all[$I][1] % exit\n";
+    $EXITED=1;
+  } elsif ($OC eq'JZ') {
+    print "  { % SKIPTO $all[$I][1]\n";
+    # not {$all[$I][1] exit}if\n";
+    $EXTRA="  }{$all[$I][1]}ifelse\n$EXTRA";
+  } elsif ($OC eq'PUSHAADR' and $all[$I][1]==0) {
+    print "  0 % PUSHAADR\n";
+  } else {
+    print "  .err. % $all[$I][0] $all[$I][1]\n";
+  }
+#q~
+#  % 0-FUNCALL: changed
+#  { exch exit }                                 % 15: 2-FUNCALL, leaves `arg faddr''
+#  { * exit }                                    % 16: JMP
+#  { 0 eq {* exit}if }                           % 17: JZ
+#  % 0-PUSHAADR: changed
+#  % *-PUSHGADR: the literal number (+1) is inserted
+#~
+}
+print "}\n";

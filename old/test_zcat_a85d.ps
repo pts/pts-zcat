@@ -1,0 +1,128 @@
+%
+% test_zcat_a85d.ps
+% by pts@fazekas.hu at Sun Nov 11 19:13:46 CET 2001
+%
+% Run: gs -q -dPSLevel1 -dNODISPLAY ttt.ps <a.file.gz.a85 >a.file.out; cmp a.file.gz.a85 a.file.out
+%
+/Codes [
+{}{}{0 -306}{1}{0 load 0 ne{5}{16}ifelse}{144 load 7 add 0 load lt{6}{8}ifelse}{143 143 load 0 0}{255 and 144 load bitshift add def 144 144 load 8 add def 8}{144 load 0 load lt{9}{14}ifelse}{501 0 0}{255 and def 0 load 16 eq{11}{12}ifelse}{500 143 load 501 load 1 16 144 load sub bitshift 1 sub and 144 load bitshift add def 143 501 load 16 144 load sub neg bitshift def 13}{500 143 load 501 load 144 load bitshift add 1 0 load bitshift 1 sub and def 143 501 load 0 load 144 load sub neg bitshift def 13}{144 144 load 8 0 load sub add def 15}{500 143 load 1 0 load bitshift 1 sub and def 144 144 load 0 load sub def 143 143 load 0 load neg bitshift 1 144 load bitshift 1 sub and def 15}{17}{500 0 def 17}{500 load 2}{499 3 load def 3 517 499 load add load def 517 499 load add 0 def 499 load 2}{0 load 0 ne{20}{23}ifelse}{517 0 load add load -19}{pop 517 0 load 1 add add load -19}{pop 517 0 load 1 add add 0 def 517 0 load 2 add add 0 def 517 0 load add 3 load def 3 0 load def 23}{0 2}{0 517 0 load add load ne{25}{30}ifelse}{1 -4}{0 ne{27}{28}ifelse}{0 517 0 load 1 add add load def 29}{0 517 0 load add load def 29}{24}{517 0 load 2 add add load 2}{502 0 def 32}{502 load 17 lt{33}{34}ifelse}{465 502 load add 0 def 502 dup load 1 add def 0 pop 32}{502 0 def 35}{502 load 0 load lt{36}{37}ifelse}{465 145 502 load add load add dup load 1 add def 0 pop 502 dup load 1 add def 0 pop 35}{465 0 def 482 0 def 502 0 def 38}{502 load 16 lt{39}{40}ifelse}{482 502 load 1 add add 482 502 load add load 465 502 load add load add 1 bitshift def 502 dup load 1 add def 0 pop 38}{520 0 def 502 0 def 41}{502 load 0 load lt{42}{55}ifelse}{145 502 load add load 0 ne{43}{54}ifelse}{503 482 145 502 load add load add load def 482 145 502 load add load add dup load 1 add def 0 pop 505 3 def 504 145 502 load add load def 44}{504 load 0 ne{45}{52}ifelse}{504 dup load 1 sub def 0 pop 517 505 load add load 0 eq{46}{48}ifelse}{517 505 load add 0 -18}{def 48}{503 load 1 504 load bitshift and 0 ne{49}{50}ifelse}{505 517 505 load add load 1 add def 51}{505 517 505 load add load 0 add def 51}{44}{517 505 load add 0 -18}{def 517 517 505 load add load 2 add add 502 load def 54}{502 dup load 1 add def 0 pop 41}{520 load 2}{2515 142 load add 0 load def 142 load 32767 eq{57}{58}ifelse}{142 0 def 59}{142 dup load 1 add def 0 pop 59}{142 load 141 load eq{60}{64}ifelse}{2515 141 load add load -1}{pop 141 load 32767 eq{62}{63}ifelse}{141 0 def 64}{141 dup load 1 add def 0 pop 64}{0 2}{508 3 def 66}{508 load 4 ne{67}{305}ifelse}{509 0 def 510 0 def 143 0 def 144 0 def 141 0 def 142 0 def 514 0 def 515 0 def 517 0 def 518 0 def 519 0 def 520 0 def 521 0 def 522 0 def 3 6 def 506 3 load def 68}{506 load 1998 lt{69}{70}ifelse}{517 506 load add 506 load 3 add def 506 dup load 1 add def 0 pop 517 506 load add 0 def 506 dup load 1 add def 0 pop 517 506 load add 0 def 506 dup load 1 add def 0 pop 68}{508 0 0}{def 508 load 0 lt{72}{73}ifelse}{508 4 def 178}{508 load 120 eq{74}{76}ifelse}{8 -4}{pop 508 1 def 178}{508 load 80 eq{77}{150}ifelse}{8 -4}{pop 506 8 -4}{def 508 3 def 506 load 3 eq{80}{107}ifelse}{8 -4}{pop 16 -4}{pop 16 -4}{pop 508 8 -4}{def 8 -4}{pop 16 -4}{pop 16 -4}{pop 16 -4}{pop 16 -4}{pop 509 8 -4}{def 509 509 load 8 -4}{8 bitshift add def 510 8 -4}{def 510 510 load 8 -4}{8 bitshift add def 16 -4}{pop 16 -4}{pop 512 8 -4}{def 512 512 load 8 -4}{8 bitshift add def 507 8 -4}{def 507 507 load 8 -4}{8 bitshift add def 100}{512 load 0 ne{101}{103}ifelse}{8 -4}{pop 512 dup load 1 sub def 0 pop 100}{507 load 0 ne{104}{106}ifelse}{8 -4}{pop 507 dup load 1 sub def 0 pop 103}{149}{506 load 7 eq{108}{113}ifelse}{506 0 def 109}{506 load 13 lt{110}{112}ifelse}{8 -4}{pop 506 dup load 1 add def 0 pop 109}{149}{506 load 5 eq{114}{125}ifelse}{506 0 def 115}{506 load 17 lt{116}{118}ifelse}{8 -4}{pop 506 dup load 1 add def 0 pop 115}{506 8 -4}{def 506 506 load 8 -4}{8 bitshift add def 121}{506 load 0 ne{122}{124}ifelse}{8 -4}{pop 506 dup load 1 sub def 0 pop 121}{149}{506 load 1 eq{126}{149}ifelse}{509 0 def 127}{509 load 25 lt{128}{130}ifelse}{8 -4}{pop 509 dup load 1 add def 0 pop 127}{512 8 -4}{def 512 512 load 8 -4}{8 bitshift add def 506 8 -4}{def 506 506 load 8 -4}{8 bitshift add def 507 8 -4}{def 507 507 load 8 -4}{8 bitshift add def 509 0 def 137}{509 load 12 lt{138}{140}ifelse}{8 -4}{pop 509 dup load 1 add def 0 pop 137}{512 load 0 ne{141}{143}ifelse}{8 -4}{pop 512 dup load 1 sub def 0 pop 140}{506 load 0 ne{144}{146}ifelse}{8 -4}{pop 506 dup load 1 sub def 0 pop 143}{507 load 0 ne{147}{149}ifelse}{8 -4}{pop 507 dup load 1 sub def 0 pop 146}{178}{508 2 def 16 -4}{pop 506 8 -4}{def 16 -4}{pop 16 -4}{pop 8 -4}{pop 8 -4}{pop 506 load 2 and 0 ne{157}{159}ifelse}{16 -4}{pop 159}{506 load 4 and 0 ne{160}{165}ifelse}{507 16 -4}{def 162}{507 load 0 ne{163}{165}ifelse}{8 -4}{pop 507 dup load 1 sub def 0 pop 162}{506 load 8 and 0 ne{166}{169}ifelse}{8 -4}{0 ne{168}{169}ifelse}{166}{506 load 16 and 0 ne{170}{173}ifelse}{8 -4}{0 ne{172}{173}ifelse}{170}{506 load 32 and 0 ne{174}{178}ifelse}{512 0 def 175}{512 load 12 lt{176}{178}ifelse}{8 -4}{pop 512 dup load 1 add def 0 pop 175}{508 load 0 eq{179}{197}ifelse}{509 load 0 ne{180}{183}ifelse}{-1  0 0}{exch}{pop 509 dup load 1 sub def 0 pop 179}{510 load 0 ne{184}{196}ifelse}{-1  0 0}{exch}{pop -1  0 0}{exch}{pop 509 32767 def 189}{509 load 0 ne{190}{195}ifelse}{-1  0 0}{exch}{pop -1  0 0}{exch}{pop 509 dup load 1 sub def 0 pop 189}{510 dup load 1 sub def 0 pop 183}{294}{508 load 4 eq{198}{199}ifelse}{294}{508 load 3 ne{200}{294}ifelse}{506 0 def 201}{506 load 0 eq{202}{288}ifelse}{506 1 -4}{def 507 2 -4}{def 507 load 0 ne{205}{279}ifelse}{507 load 1 eq{206}{222}ifelse}{509 288 def 207}{509 load 0 ne{208}{216}ifelse}{509 dup load 1 sub def 0 pop 509 load 144 lt{209}{210}ifelse}{145 509 load add 8 def 215}{509 load 256 lt{211}{212}ifelse}{145 509 load add 9 def 215}{509 load 280 lt{213}{214}ifelse}{145 509 load add 7 def 215}{145 509 load add 8 def 215}{207}{514 288 -31}{def 512 0 def 218}{512 load 32 lt{219}{220}ifelse}{145 512 load add 5 def 512 dup load 1 add def 0 pop 218}{515 32 -31}{def 256}{513 5 -4}{257 add def 516 5 -4}{1 add def 514 4 -4}{4 add def 509 0 def 226}{509 load 514 load lt{227}{229}ifelse}{145 4 509 load add load add 3 -4}{def 509 dup load 1 add def 0 pop 226}{509 load 19 lt{230}{231}ifelse}{145 4 509 load add load add 0 def 509 dup load 1 add def 0 pop 229}{514 19 -31}{def 510 0 def 509 0 def 233}{509 load 513 load 516 load add lt{234}{249}ifelse}{511 514 load -24}{def 511 load 16 eq{236}{238}ifelse}{511 510 load def 512 3 2 -4}{add def 245}{511 load 17 eq{239}{241}ifelse}{511 0 def 512 3 3 -4}{add def 245}{511 load 18 eq{242}{244}ifelse}{511 0 def 512 11 7 -4}{add def 245}{510 511 load def 512 1 def 245}{507 512 load def 246}{507 load 0 ne{247}{248}ifelse}{145 509 load add 511 load def 509 dup load 1 add def 0 pop 507 dup load 1 sub def 0 pop 246}{233}{514 load -19}{pop 514 513 load -31}{def 509 516 load def 252}{509 load 0 ne{253}{254}ifelse}{509 dup load 1 sub def 0 pop 145 509 load add 145 509 load 513 load add add load def 252}{515 516 load -31}{def 256}{509 514 load -24}{def 258}{509 load 256 ne{259}{276}ifelse}{509 load 257 lt{260}{262}ifelse}{509 load -56}{pop 274}{509 509 load 257 sub def 512 23 509 load add load 52 509 load add load -4}{add def 509 515 load -24}{def 509 81 509 load add load 111 509 load add load -4}{add def 142 load 509 load lt{266}{267}ifelse}{509 32768 509 load sub 142 load add def 268}{509 142 load 509 load sub def 268}{512 load 0 ne{269}{274}ifelse}{2515 509 load add load -56}{pop 509 load 32767 eq{271}{272}ifelse}{509 0 def 273}{509 dup load 1 add def 0 pop 273}{512 dup load 1 sub def 0 pop 268}{509 514 load -24}{def 258}{514 load -19}{pop 515 load -19}{pop 287}{144 load 7 and -4}{pop 509 16 -4}{def 16 -4}{pop 283}{509 load 0 ne{284}{287}ifelse}{-56  8 -4}{exch}{pop 509 dup load 1 sub def 0 pop 283}{201}{141 load 142 load ne{289}{294}ifelse}{2515 141 load add load -1}{pop 141 load 32767 eq{291}{292}ifelse}{141 0 def 293}{141 dup load 1 add def 0 pop 293}{288}{508 load 2 eq{295}{300}ifelse}{16 -4}{pop 16 -4}{pop 16 -4}{pop 16 -4}{pop 304}{508 load 1 eq{301}{304}ifelse}{16 -4}{pop 16 -4}{pop 304}{66}{0 2}{1 1 def 2 0 def 307}{2 load 30 lt{308}{309}ifelse}{81 2 load add 1 load 1 add def 2 dup load 1 add def 0 pop 81 2 load add 1 load 1 bitshift 1 load add -1 bitshift 1 add def 2 dup load 1 add def 0 pop 1 1 load 1 bitshift def 307}{81 1 def 2 0 def 310}{2 load 30 lt{311}{312}ifelse}{111 2 load add 2 load -1 bitshift 1 sub def 2 dup load 1 add def 0 pop 310}{111 0 def 112 0 def 23 3 def 24 4 def 25 5 def 26 6 def 27 7 def 28 8 def 29 9 def 30 10 def 31 11 def 32 13 def 33 15 def 34 17 def 35 19 def 36 23 def 37 27 def 38 31 def 39 35 def 40 43 def 41 51 def 42 59 def 43 67 def 44 83 def 45 99 def 46 115 def 47 131 def 48 163 def 49 195 def 50 227 def 51 258 def 4 16 def 5 17 def 6 18 def 7 0 def 8 8 def 9 7 def 10 9 def 11 6 def 12 10 def 13 5 def 14 11 def 15 4 def 16 12 def 17 3 def 18 13 def 19 2 def 20 14 def 21 1 def 22 15 def 2 0 def 1 0 def 313}{2 load 28 lt{314}{317}ifelse}{2 load 4 eq{315}{316}ifelse}{1 1 def 316}{52 2 load add 2 load -2 bitshift 1 load sub def 2 dup load 1 add def 0 pop 313}{80 0 def 0 -65}{pop 0 2}] bind def
+% vm.ps
+% a simplified OC virtual machine
+% by pts@fazekas.hu at Sat Jul 28 21:11:56 CEST 2001
+% works!! -- Sat Jul 28 22:13:00 CEST 2001
+%
+% Timing: 153250ms user for bash.file
+% Timing:   8240ms user for pts2.pbm
+% Timing:   6790ms user for pts2.pbm, removed `exit's
+% Timing:   6690ms user for pts2.pbm, changed signs
+%
+% l load
+% b bitshift
+% i ifelse
+% d def
+% a add
+% s sub
+% e eq
+% n ne
+% p pop
+% u dup
+% t lt
+%
+%
+% Usage: gs -r72 -q vm.ps
+
+% pts2.pbm: w=419 h=534 data_offset=34 size=28336
+% pts2.pbm.gz csize=7520
+
+%/Codes [
+%  (t) run
+%] bind def
+
+% Codes === {
+
+%%%/Ram 36000 array def
+0 1 35999 {0 def} for
+/Ip 2 def
+/Stdin (%stdin) (r) file def
+%/Stdin (pts2.pbm.gz) (r) file def
+%/Offset 34 def % must be smaller than `AllOut length'
+%/Stdin (alma.gz) (r) file def
+/Stdout (%stdout) (w) file def
+%/AllOut 4096 string def
+%/Stack [ ] def
+/sx 32 def /dx 0 def /c0 0 def
+
+
+%/_img_src { % - _img_src <data-string>
+%  /SubOut AllOut def
+%  mark Stack aload pop
+  {
+
+    % /Exec ===
+    Codes Ip get exec
+    % /Done ===
+    dup -1 lt { % function call
+      neg
+      %%% Ram 0 get % save arg to stack
+      0 load
+      Ip 1 add  % save return position to stack
+      % Now: <arg> <faddr> <retarg> <retip>
+      4 2 roll
+      /Ip exch def
+      %%% Ram exch 0 exch put
+      0 exch def
+      % Now: <retarg> <retip>
+    }{
+      dup 2 gt { % JMP
+        /Ip exch def
+      }{
+        /Ip Ip 1 add def
+        dup 0 eq { % getchar()
+          pop pop % forget faddr and arg
+
+%!!          Stdin read not{-1}if
+
+{27 sx ge{exit}if Stdin read not{511}if dup 122 eq{/sx 27 def/dx 0 def/c0 0
+def}{dup 117 gt{/sx 54 sx sub def}{dup 33 ge{sx 32 eq{dup/c0 exch def/dx
+-1670420001 def}{dup 117 sub{1 85 7225 614125}sx 28 sub get mul dx add/dx exch
+def}ifelse/sx sx 1 sub def}if}ifelse}ifelse pop}loop sx 22 eq{-1}{c0 1868977
+mul dx add sx 24 and neg bitshift 23 sx lt{c0 3 mul add}if/sx sx 3 eq{32}{sx 7
+mod 3 eq{22}{sx 8 sub}ifelse}ifelse def}ifelse
+255 and % really-really important!!
+
+        }{
+          dup -1 eq { % putchar()
+            pop % forget faddr
+            Stdout exch write
+            % neg 255 add % negate component brr...!! -- pbm and ps differ!
+            % SubOut exch 0 exch put
+            0 % fake retval
+            % /SubOut SubOut 1 SubOut length 1 sub getinterval def
+            % SubOut length 0 eq{exit}if
+          }{
+            dup 1 eq { % halt
+              pop pop % forget junk!!
+              /Ip Ip -1 add def % let it halt again!
+              exit % _halt_
+            }{ % RET
+              pop % forget ..faddr
+              3 1 roll
+              % Now: <retval> <retarg> <retip>
+              /Ip exch def
+              %%% Ram exch 0 exch put
+              0 exch def
+              % Now: <retval>
+            } ifelse
+          } ifelse
+        } ifelse
+      } ifelse
+    } ifelse
+  } bind loop
+%  counttomark array astore exch pop
+%  % Now: <new-Stack>
+%  /Stack exch def
+%  AllOut Offset AllOut length SubOut length sub Offset sub getinterval % return substring
+%  /Offset 0 def
+%} bind def
+
+quit

@@ -1,0 +1,2414 @@
+# 1 "rcm.c"
+# 1 "/usr/local/include/stdlib.h" 1 3
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+
+# 1 "/usr/local/include/features.h" 1 3
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+ 
+
+
+
+ 
+
+
+
+
+
+
+
+ 
+# 117 "/usr/local/include/features.h" 3
+
+
+ 
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+# 1 "/usr/local/include/sys/cdefs.h" 1 3
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# 1 "/usr/local/include/features.h" 1 3
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# 222 "/usr/local/include/features.h" 3
+
+# 22 "/usr/local/include/sys/cdefs.h" 2 3
+
+
+ 
+
+
+
+
+
+
+
+# 54 "/usr/local/include/sys/cdefs.h" 3
+
+
+ 
+
+
+
+
+
+
+
+ 
+
+
+
+# 86 "/usr/local/include/sys/cdefs.h" 3
+
+
+
+ 
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+
+
+# 205 "/usr/local/include/features.h" 2 3
+
+
+
+ 
+
+ 
+
+
+
+
+
+
+
+
+# 1 "/usr/local/include/gnu/stubs.h" 1 3
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# 219 "/usr/local/include/features.h" 2 3
+
+
+
+
+# 26 "/usr/local/include/stdlib.h" 2 3
+
+
+ 
+
+
+
+# 1 "/usr/lib/gcc-lib/i486-linux/2.7.2.3/include/stddef.h" 1 3
+
+
+
+
+
+ 
+
+
+# 17 "/usr/lib/gcc-lib/i486-linux/2.7.2.3/include/stddef.h" 3
+
+
+
+ 
+
+
+ 
+
+
+
+
+
+ 
+
+
+# 59 "/usr/lib/gcc-lib/i486-linux/2.7.2.3/include/stddef.h" 3
+
+
+ 
+
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+ 
+
+ 
+
+# 129 "/usr/lib/gcc-lib/i486-linux/2.7.2.3/include/stddef.h" 3
+
+
+ 
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+typedef unsigned int size_t;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+typedef long int wchar_t;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+# 288 "/usr/lib/gcc-lib/i486-linux/2.7.2.3/include/stddef.h" 3
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# 32 "/usr/local/include/stdlib.h" 2 3
+
+
+ 
+
+ 
+typedef struct
+  {
+    int quot;			 
+    int rem;			 
+  } div_t;
+
+ 
+typedef struct
+  {
+    long int quot;		 
+    long int rem;		 
+  } ldiv_t;
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+ 
+
+
+
+
+
+ 
+
+extern int __ctype_get_mb_cur_max  (void)  ;
+
+
+ 
+extern double atof  (__const char *__nptr)  ;
+ 
+extern int atoi  (__const char *__nptr)  ;
+ 
+extern long int atol  (__const char *__nptr)  ;
+
+
+ 
+extern long long int atoll  (__const char *__nptr)  ;
+
+
+ 
+extern double strtod  (__const char *__nptr, char **__endptr)  ;
+
+
+
+
+
+
+
+ 
+extern long int strtol  (__const char *__nptr, char **__endptr,
+			     int __base)  ;
+ 
+extern unsigned long int strtoul  (__const char *__nptr,
+				       char **__endptr, int __base)  ;
+
+
+ 
+extern long long int strtoq  (__const char *__nptr, char **__endptr,
+				  int __base)  ;
+ 
+extern unsigned long long int strtouq  (__const char *__nptr,
+					    char **__endptr, int __base)  ;
+
+
+
+ 
+
+ 
+extern long long int strtoll  (__const char *__nptr, char **__endptr,
+				   int __base)  ;
+ 
+extern unsigned long long int strtoull  (__const char *__nptr,
+					     char **__endptr, int __base)  ;
+
+
+
+
+ 
+
+
+extern double __strtod_internal  (__const char *__nptr,
+				      char **__endptr, int __group)  ;
+extern float __strtof_internal  (__const char *__nptr, char **__endptr,
+				     int __group)  ;
+extern long double  __strtold_internal  (__const char *__nptr,
+						char **__endptr, int __group)  ;
+extern long int __strtol_internal  (__const char *__nptr, char **__endptr,
+					int __base, int __group)  ;
+extern unsigned long int __strtoul_internal  (__const char *__nptr,
+						  char **__endptr, int __base,
+						  int __group)  ;
+
+extern long long int __strtoq_internal  (__const char *__nptr,
+					     char **__endptr, int __base,
+					     int __group)  ;
+extern unsigned long long int __strtouq_internal  (__const char *__nptr,
+						       char **__endptr,
+						       int __base,
+						       int __group)  ;
+
+
+# 197 "/usr/local/include/stdlib.h" 3
+
+
+
+
+ 
+
+
+extern char *l64a  (long int __n)  ;
+
+ 
+extern long int a64l  (__const char *__s)  ;
+
+
+# 1 "/usr/local/include/sys/types.h" 1 3
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+ 
+
+# 1 "/usr/local/include/gnu/types.h" 1 3
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+typedef unsigned char __u_char;
+typedef unsigned short __u_short;
+typedef unsigned int __u_int;
+typedef unsigned long __u_long;
+
+typedef unsigned long long int __u_quad_t;
+typedef long long int __quad_t;
+# 41 "/usr/local/include/gnu/types.h" 3
+
+typedef __quad_t *__qaddr_t;
+
+typedef __u_quad_t __dev_t;		 
+typedef __u_int __uid_t;		 
+typedef __u_int __gid_t;		 
+typedef __u_long __ino_t;		 
+typedef __u_int __mode_t;		 
+typedef __u_int __nlink_t; 		 
+typedef long int __off_t;		 
+typedef __quad_t __loff_t;		 
+typedef int __pid_t;			 
+typedef int __ssize_t;			 
+
+typedef struct
+  {
+    int __val[2];
+  } __fsid_t;				 
+
+ 
+typedef int __daddr_t;			 
+typedef char *__caddr_t;
+typedef long int __time_t;
+typedef long int __swblk_t;		 
+
+typedef long int __clock_t;
+
+ 
+typedef unsigned long int __fd_mask;
+
+ 
+
+
+ 
+
+
+
+
+ 
+typedef struct
+  {
+     
+    __fd_mask fds_bits[1024  / (8 * sizeof (__fd_mask)) ];
+  } __fd_set;
+
+
+typedef int __key_t;
+
+typedef unsigned short int __ipc_pid_t;
+
+
+# 30 "/usr/local/include/sys/types.h" 2 3
+
+
+
+typedef __u_char u_char;
+typedef __u_short u_short;
+typedef __u_int u_int;
+typedef __u_long u_long;
+typedef __quad_t quad_t;
+typedef __u_quad_t u_quad_t;
+typedef __fsid_t fsid_t;
+
+
+typedef __dev_t dev_t;
+typedef __gid_t gid_t;
+typedef __ino_t ino_t;
+typedef __mode_t mode_t;
+typedef __nlink_t nlink_t;
+typedef __off_t off_t;
+typedef __loff_t loff_t;
+typedef __pid_t pid_t;
+typedef __uid_t uid_t;
+
+
+typedef __ssize_t ssize_t;
+
+
+
+
+typedef __daddr_t daddr_t;
+typedef __caddr_t caddr_t;
+
+
+
+typedef __key_t key_t;
+
+
+
+# 1 "/usr/local/include/time.h" 1 3
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# 56 "/usr/local/include/time.h" 3
+
+
+
+# 68 "/usr/local/include/time.h" 3
+
+
+
+
+
+
+
+
+
+ 
+typedef __time_t time_t;
+
+
+
+
+
+# 97 "/usr/local/include/time.h" 3
+
+
+
+
+
+# 125 "/usr/local/include/time.h" 3
+
+
+
+# 281 "/usr/local/include/time.h" 3
+
+
+
+# 67 "/usr/local/include/sys/types.h" 2 3
+
+
+
+# 1 "/usr/lib/gcc-lib/i486-linux/2.7.2.3/include/stddef.h" 1 3
+
+
+
+
+
+ 
+
+
+# 17 "/usr/lib/gcc-lib/i486-linux/2.7.2.3/include/stddef.h" 3
+
+
+
+ 
+
+
+ 
+
+
+
+
+
+ 
+
+
+# 59 "/usr/lib/gcc-lib/i486-linux/2.7.2.3/include/stddef.h" 3
+
+
+ 
+
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+ 
+
+ 
+
+# 129 "/usr/lib/gcc-lib/i486-linux/2.7.2.3/include/stddef.h" 3
+
+
+ 
+
+ 
+
+
+# 180 "/usr/lib/gcc-lib/i486-linux/2.7.2.3/include/stddef.h" 3
+
+
+
+
+
+ 
+
+
+
+
+ 
+
+# 256 "/usr/lib/gcc-lib/i486-linux/2.7.2.3/include/stddef.h" 3
+
+
+ 
+
+# 288 "/usr/lib/gcc-lib/i486-linux/2.7.2.3/include/stddef.h" 3
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# 70 "/usr/local/include/sys/types.h" 2 3
+
+
+
+ 
+typedef unsigned long int ulong;
+typedef unsigned short int ushort;
+typedef unsigned int uint;
+
+
+ 
+
+# 95 "/usr/local/include/sys/types.h" 3
+
+
+ 
+
+
+
+
+
+typedef int int8_t __attribute__ ((__mode__ (  __QI__ ))) ;
+typedef unsigned int u_int8_t __attribute__ ((__mode__ (  __QI__ ))) ;
+typedef int int16_t __attribute__ ((__mode__ (  __HI__ ))) ;
+typedef unsigned int u_int16_t __attribute__ ((__mode__ (  __HI__ ))) ;
+typedef int int32_t __attribute__ ((__mode__ (  __SI__ ))) ;
+typedef unsigned int u_int32_t __attribute__ ((__mode__ (  __SI__ ))) ;
+typedef int int64_t __attribute__ ((__mode__ (  __DI__ ))) ;
+typedef unsigned int u_int64_t __attribute__ ((__mode__ (  __DI__ ))) ;
+
+typedef int register_t __attribute__ ((__mode__ (__word__)));
+
+
+ 
+
+
+
+
+
+
+ 
+# 1 "/usr/local/include/endian.h" 1 3
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+ 
+# 1 "/usr/local/include/bytesex.h" 1 3
+ 
+
+
+# 34 "/usr/local/include/endian.h" 2 3
+
+
+
+
+
+
+
+
+
+
+# 123 "/usr/local/include/sys/types.h" 2 3
+
+
+ 
+# 1 "/usr/local/include/sys/select.h" 1 3
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+
+ 
+
+
+ 
+# 1 "/usr/local/include/selectbits.h" 1 3
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# 50 "/usr/local/include/selectbits.h" 3
+
+# 65 "/usr/local/include/selectbits.h" 3
+
+
+
+# 31 "/usr/local/include/sys/select.h" 2 3
+
+
+ 
+
+# 1 "/usr/local/include/time.h" 1 3
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# 56 "/usr/local/include/time.h" 3
+
+
+
+# 68 "/usr/local/include/time.h" 3
+
+
+
+# 80 "/usr/local/include/time.h" 3
+
+
+
+
+
+
+
+
+
+ 
+
+struct timespec
+  {
+    long int tv_sec;		 
+    long int tv_nsec;		 
+  };
+
+
+
+
+
+
+# 125 "/usr/local/include/time.h" 3
+
+
+
+# 281 "/usr/local/include/time.h" 3
+
+
+
+# 35 "/usr/local/include/sys/select.h" 2 3
+
+
+ 
+
+ 
+
+
+
+struct timeval;
+
+typedef __fd_mask fd_mask;
+
+ 
+typedef __fd_set fd_set;
+
+ 
+
+
+
+ 
+
+
+
+
+ 
+
+
+
+
+
+
+ 
+
+
+
+
+extern int __select  (int __nfds, __fd_set *__readfds,
+			  __fd_set *__writefds, __fd_set *__exceptfds,
+			  struct timeval *__timeout)  ;
+extern int select  (int __nfds, __fd_set *__readfds,
+			__fd_set *__writefds, __fd_set *__exceptfds,
+			struct timeval *__timeout)  ;
+
+ 
+
+
+extern int __pselect  (int __nfds, __fd_set *__readfds,
+			   __fd_set *__writefds, __fd_set *__exceptfds,
+			   struct timespec *__timeout)  ;
+extern int pselect  (int __nfds, __fd_set *__readfds,
+			 __fd_set *__writefds, __fd_set *__exceptfds,
+			 struct timespec *__timeout)  ;
+
+
+ 
+
+
+# 126 "/usr/local/include/sys/types.h" 2 3
+
+
+
+
+ 
+
+
+# 210 "/usr/local/include/stdlib.h" 2 3
+
+
+ 
+
+
+
+ 
+extern int32_t __random  (void)  ;
+extern int32_t random  (void)  ;
+
+ 
+extern void __srandom  (unsigned int __seed)  ;
+extern void srandom  (unsigned int __seed)  ;
+
+ 
+
+
+
+extern void *  __initstate  (unsigned int __seed, void *  __statebuf,
+				 size_t __statelen)  ;
+extern void *  initstate  (unsigned int __seed, void *  __statebuf,
+			       size_t __statelen)  ;
+
+ 
+
+extern void *  __setstate  (void *  __statebuf)  ;
+extern void *  setstate  (void *  __statebuf)  ;
+
+
+
+ 
+
+
+
+struct random_data
+  {
+    int32_t *fptr;		 
+    int32_t *rptr;		 
+    int32_t *state;		 
+    int rand_type;		 
+    int rand_deg;		 
+    int rand_sep;		 
+    int32_t *end_ptr;		 
+  };
+
+extern int __random_r  (struct random_data *__buf, int32_t *__result)  ;
+extern int random_r  (struct random_data *__buf, int32_t *__result)  ;
+
+extern int __srandom_r  (unsigned int __seed, struct random_data *__buf)  ;
+extern int srandom_r  (unsigned int __seed, struct random_data *__buf)  ;
+
+extern int __initstate_r  (unsigned int __seed, void *  __statebuf,
+			       size_t __statelen, struct random_data *__buf)  ;
+extern int initstate_r  (unsigned int __seed, void *  __statebuf,
+			     size_t __statelen, struct random_data *__buf)  ;
+
+extern int __setstate_r  (void *  __statebuf, struct random_data *__buf)  ;
+extern int setstate_r  (void *  __statebuf, struct random_data *__buf)  ;
+
+
+
+
+ 
+extern int rand  (void)  ;
+ 
+extern void srand  (unsigned int __seed)  ;
+
+
+ 
+extern int __rand_r  (unsigned int *__seed)  ;
+extern int rand_r  (unsigned int *__seed)  ;
+
+
+
+
+ 
+
+ 
+extern double drand48  (void)  ;
+extern double erand48  (unsigned short int __xsubi[3])  ;
+
+ 
+extern long lrand48  (void)  ;
+extern long nrand48  (unsigned short int __xsubi[3])  ;
+
+ 
+extern long mrand48  (void)  ;
+extern long jrand48  (unsigned short int __xsubi[3])  ;
+
+ 
+extern void srand48  (long __seedval)  ;
+extern unsigned short int *seed48  (unsigned short int __seed16v[3])  ;
+extern void lcong48  (unsigned short int __param[7])  ;
+
+ 
+struct drand48_data
+  {
+    unsigned short int x[3];	 
+    unsigned short int a[3];	 
+    unsigned short int c;	 
+    unsigned short int old_x[3];  
+    int init;			 
+  };
+
+
+ 
+extern int drand48_r  (struct drand48_data *__buffer, double *__result)  ;
+extern int erand48_r  (unsigned short int __xsubi[3],
+			   struct drand48_data *__buffer, double *__result)  ;
+
+ 
+extern int lrand48_r  (struct drand48_data *__buffer, long *__result)  ;
+extern int nrand48_r  (unsigned short int __xsubi[3],
+			   struct drand48_data *__buffer, long *__result)  ;
+
+ 
+extern int mrand48_r  (struct drand48_data *__buffer, long *__result)  ;
+extern int jrand48_r  (unsigned short int __xsubi[3],
+			   struct drand48_data *__buffer, long *__result)  ;
+
+ 
+extern int srand48_r  (long __seedval, struct drand48_data *__buffer)  ;
+extern int seed48_r  (unsigned short int __seed16v[3],
+			  struct drand48_data *__buffer)  ;
+extern int lcong48_r  (unsigned short int __param[7],
+			   struct drand48_data *__buffer)  ;
+
+
+ 
+extern int __drand48_iterate  (unsigned short int __xsubi[3],
+				   struct drand48_data *__buffer)  ;
+
+
+
+ 
+extern void *  malloc  (size_t __size)  ;
+ 
+
+extern void *  realloc  (void *  __ptr, size_t __size)  ;
+ 
+extern void *  calloc  (size_t __nmemb, size_t __size)  ;
+ 
+extern void free  (void *  __ptr)  ;
+
+
+ 
+extern void cfree  (void *  __ptr)  ;
+
+
+
+# 1 "/usr/local/include/alloca.h" 1 3
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# 1 "/usr/lib/gcc-lib/i486-linux/2.7.2.3/include/stddef.h" 1 3
+
+
+
+
+
+ 
+
+
+# 17 "/usr/lib/gcc-lib/i486-linux/2.7.2.3/include/stddef.h" 3
+
+
+
+ 
+
+
+ 
+
+
+
+
+
+ 
+
+
+# 59 "/usr/lib/gcc-lib/i486-linux/2.7.2.3/include/stddef.h" 3
+
+
+ 
+
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+ 
+
+ 
+
+# 129 "/usr/lib/gcc-lib/i486-linux/2.7.2.3/include/stddef.h" 3
+
+
+ 
+
+ 
+
+
+# 180 "/usr/lib/gcc-lib/i486-linux/2.7.2.3/include/stddef.h" 3
+
+
+
+
+
+ 
+
+
+
+
+ 
+
+# 256 "/usr/lib/gcc-lib/i486-linux/2.7.2.3/include/stddef.h" 3
+
+
+ 
+
+# 288 "/usr/lib/gcc-lib/i486-linux/2.7.2.3/include/stddef.h" 3
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# 25 "/usr/local/include/alloca.h" 2 3
+
+
+ 
+
+ 
+
+
+
+ 
+extern void *  __alloca  (size_t __size)  ;
+extern void *  alloca  (size_t __size)  ;
+
+
+
+
+
+
+ 
+
+
+# 360 "/usr/local/include/stdlib.h" 2 3
+
+
+
+
+ 
+extern void *  valloc  (size_t __size)  ;
+
+
+
+ 
+extern void abort  (void)   __attribute__ ((__noreturn__));
+
+
+ 
+extern int atexit  (void (*__func) (void))  ;
+
+
+ 
+
+extern int __on_exit  (void (*__func) (int __status, void *  __arg),
+			   void *  __arg)  ;
+extern int on_exit  (void (*__func) (int __status, void *  __arg),
+			 void *  __arg)  ;
+
+
+ 
+
+
+extern void exit  (int __status)   __attribute__ ((__noreturn__));
+
+
+ 
+extern char *getenv  (__const char *__name)  ;
+
+ 
+
+extern char *__secure_getenv  (__const char *__name)  ;
+
+
+ 
+ 
+
+extern int putenv  (__const char *__string)  ;
+
+
+
+ 
+
+extern int setenv  (__const char *__name, __const char *__value,
+			int __replace)  ;
+
+ 
+extern void unsetenv  (__const char *__name)  ;
+
+
+
+ 
+
+
+extern int __clearenv  (void)  ;
+extern int clearenv  (void)  ;
+
+
+
+
+ 
+
+
+
+extern char *mktemp  (char *__template)  ;
+
+ 
+
+
+
+
+extern int mkstemp  (char *__template)  ;
+
+
+
+ 
+extern int system  (__const char *__command)  ;
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+extern char *realpath  (__const char *__name, char *__resolved)  ;
+
+
+
+ 
+
+
+typedef int (*__compar_fn_t)  (__const void * , __const void * )  ;
+
+
+
+
+
+
+ 
+
+extern void *  bsearch  (__const void *  __key, __const void *  __base,
+			     size_t __nmemb, size_t __size,
+			     __compar_fn_t __compar)  ;
+
+ 
+
+extern void qsort  (void *  __base, size_t __nmemb, size_t __size,
+			__compar_fn_t __compar)  ;
+
+
+ 
+extern int abs  (int __x)   __attribute__ ((__const__));
+extern long int labs  (long int __x)   __attribute__ ((__const__));
+
+
+
+
+
+ 
+
+ 
+extern div_t div  (int __numer, int __denom)   __attribute__ ((__const__));
+extern ldiv_t ldiv  (long int __numer, long int __denom)   __attribute__ ((__const__));
+
+
+
+
+
+
+ 
+
+
+ 
+
+
+extern char *ecvt  (double __value, int __ndigit, int *__decpt,
+			int *__sign)  ;
+
+ 
+
+
+extern char *fcvt  (double __value, int __ndigit, int *__decpt,
+			int *__sign)  ;
+
+ 
+
+
+extern char *gcvt  (double __value, int __ndigit, char *__buf)  ;
+
+ 
+extern char *qecvt  (long double  __value, int __ndigit, int *__decpt,
+			 int *__sign)  ;
+extern char *qfcvt  (long double  __value, int __ndigit, int *__decpt,
+			 int *__sign)  ;
+extern char *qgcvt  (long double  __value, int __ndigit, char *__buf)  ;
+
+
+
+ 
+
+extern int ecvt_r  (double __value, int __ndigit, int *__decpt,
+			int *__sign, char *__buf, size_t __len)  ;
+extern int fcvt_r  (double __value, int __ndigit, int *__decpt,
+			int *__sign, char *__buf, size_t __len)  ;
+
+extern int qecvt_r  (long double  __value, int __ndigit, int *__decpt,
+			 int *__sign, char *__buf, size_t __len)  ;
+extern int qfcvt_r  (long double  __value, int __ndigit, int *__decpt,
+			 int *__sign, char *__buf, size_t __len)  ;
+
+
+
+
+ 
+
+extern int mblen  (__const char *__s, size_t __n)  ;
+ 
+
+extern int mbtowc  (wchar_t *__pwc, __const char *__s, size_t __n)  ;
+ 
+
+extern int wctomb  (char *__s, wchar_t __wchar)  ;
+
+
+ 
+extern size_t mbstowcs  (wchar_t *__pwcs, __const char *__s, size_t __n)  ;
+ 
+extern size_t wcstombs  (char *__s, __const wchar_t *__pwcs, size_t __n)  ;
+
+
+
+ 
+
+
+
+extern int rpmatch  (__const char *__response)  ;
+
+
+
+# 582 "/usr/local/include/stdlib.h" 3
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+# 1 "rcm.c" 2
+
+# 1 "/usr/local/include/malloc.h" 1 3
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# 1 "/usr/lib/gcc-lib/i486-linux/2.7.2.3/include/stddef.h" 1 3
+
+
+
+
+
+ 
+
+
+
+
+
+
+ 
+
+ 
+
+
+
+
+ 
+
+
+ 
+
+
+
+
+
+ 
+
+
+# 59 "/usr/lib/gcc-lib/i486-linux/2.7.2.3/include/stddef.h" 3
+
+
+ 
+
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+ 
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+typedef int ptrdiff_t;
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+ 
+
+ 
+
+
+# 180 "/usr/lib/gcc-lib/i486-linux/2.7.2.3/include/stddef.h" 3
+
+
+
+
+
+ 
+
+
+
+
+ 
+
+
+# 254 "/usr/lib/gcc-lib/i486-linux/2.7.2.3/include/stddef.h" 3
+
+
+
+
+ 
+
+# 288 "/usr/lib/gcc-lib/i486-linux/2.7.2.3/include/stddef.h" 3
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+# 42 "/usr/local/include/malloc.h" 2 3
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+extern int __malloc_initialized;
+
+ 
+
+
+
+
+ 
+extern void *  malloc  (size_t __size)  ;
+
+ 
+extern void *  calloc  (size_t __nmemb, size_t __size)  ;
+
+ 
+
+extern void *  realloc  (void *  __ptr, size_t __size)  ;
+
+ 
+extern void free  (void *  __ptr)  ;
+
+ 
+extern void cfree  (void *  __ptr)  ;
+
+ 
+extern void *  memalign  (size_t __alignment, size_t __size)  ;
+
+ 
+extern void *  valloc  (size_t __size)  ;
+
+ 
+
+extern void *   pvalloc  (size_t __size)  ;
+
+ 
+
+extern void *  (*__morecore)  (ptrdiff_t __size)  ;
+
+ 
+extern void *  __default_morecore  (ptrdiff_t __size)  ;
+
+ 
+struct mallinfo {
+  int arena;     
+  int ordblks;   
+  int smblks;    
+  int hblks;     
+  int hblkhd;    
+  int usmblks;   
+  int fsmblks;   
+  int uordblks;  
+  int fordblks;  
+  int keepcost;  
+};
+
+ 
+extern struct mallinfo mallinfo  (void)  ;
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+
+ 
+extern int mallopt  (int __param, int __val)  ;
+
+ 
+
+extern int malloc_trim  (size_t __pad)  ;
+
+ 
+
+extern size_t malloc_usable_size  (void *  __ptr)  ;
+
+ 
+extern void malloc_stats  (void)  ;
+
+ 
+extern void *  malloc_get_state  (void)  ;
+
+ 
+
+extern int malloc_set_state  (void *  __ptr)  ;
+
+
+
+ 
+extern void (*__malloc_initialize_hook)  (void)  ;
+extern void (*__free_hook)  (void *  __ptr)  ;
+extern void *  (*__malloc_hook)  (size_t __size)  ;
+extern void *  (*__realloc_hook)  (void *  __ptr,
+						     size_t __size)  ;
+extern void *  (*__memalign_hook)  (size_t __size,
+						      size_t __alignment)  ;
+extern void (*__after_morecore_hook)  (void)  ;
+
+ 
+extern void __malloc_check_init  (void)  ;
+
+
+
+
+
+
+
+
+# 2 "rcm.c" 2
+
+
+unsigned  W[] = { 16, 17, 18,  0, 8, 7, 9,  6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15 }
+,u[] = { 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15,  17, 19, 23, 27, 31, 35, 43, 51,
+59,  67,  83,  99, 115, 131, 163, 195,  227, 258 } ,P[] = { 0,0,0,0,  0,0,0,0,  1, 1, 1, 1, 2,
+2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0 } ,Q[] = { 1, 2, 3, 4, 5, 7, 9,
+13, 17, 25,  33, 49, 65, 97,  129, 193, 257, 385,  513, 769, 1025, 1537, 2049,
+3073,  4097,  6145,  8193,  12289, 16385, 24577 } ,L[] = { 0,0,0,0,  1, 1, 2, 2, 3, 3,
+4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13 }, y, C, t,
+Z[320],  b[17], G[17]; unsigned  long  j; unsigned  char S[32768 ]; struct x  { struct x  *o, *O; unsigned  l; } F, *V, *h,
+*I, **e;
+
+unsigned  B(  unsigned  l, unsigned  O)
+{
+  unsigned  w = 0, o, f, q; if(  !O) { ; {
+    B(  24, 1); o = B(  8, 1); B(  24, 1); B(  24, 1); {
+      if(  o & 4) { ; for(  q = B(  16, 1); q--; B(  8, 1)); } ; {
+        for( ; o &  8 && B(  8, 1); ) { ; ;
+    }
+  }
+  for( ; o & 16 && B(  8, 1); );
+  o & 2 && B(  16, 1);
+}
+
+for(  o = 0; !o; ) { ;
+{
+  o = B(  1, 1); q = B(  2, 1); if( 
+  q || B(  8, 7)) { ; { ; { ; } ; ; ;
+    q & 1 && B(  7, 8);
+    q & 2 && B(  3, 9); B(  5, 6);
+    I = V; B(  2, 4); I = h; B(  9, 4); } ; }
+  } ; ; { ; } ; { ; } ; { ; } ; { ; }
+}
+
+for( ; (C %= 32768  ) != (t %= 32768  ); putcha  (C++[S])); } ; }
+
+else if(  O==  6)
+{
+  ; { ; { ; } for( ; (O = B(  6, (I = V, 3) ))  != 256; )
+  if(  O > 256 || (B(  O, 2),  0)) { ; {
+    O -= 257; l = u[O] + B(  P[O],  1);
+    I =  h; O = B(  5, 3); O = Q[O] + B(  L[O], 1);
+      O = O <= t ?
+    t - O : 32768  - O + t; for( ; l--; O %= 32768  ) B(  S[O++], 2) ; } ; }
+  }
+  ;} else if(  O==  3) {
+    ; { for( ; I->o; I = B(  1, 1) ? I->O : I->o); w = I->l; } ;
+  } else if(  O==  5) { ; { for(  O =  17; O--; O[b] =
+  0); for(  O++; O < l;
+    O++[Z][b]++);
+      for(  *b = *G = O = 0 ; O < 16; O++) { ; {
+  G[O+1] = (O[G] + b[O]) << 1; ; }
+}
+
+for(  I = 0, O = 0; O < l; O++) if(  Z[O]) { ;
+{
+  for(  e = (q = O[Z][G], Z[O][G]++,
+  o = Z[O], &I); o-- && (*e || ((*(*e = malloc(sizeof(struct x )) ) = F), 1));
+  e = ((q >> o) & 1) ? &(*e)->O : &(*e)->o);
+  *(*e = malloc(sizeof(struct x )) )
+  = F; (*e)->l = O; } ; } } ; } else if(  O==  2) { ; {
+  t++[S] = l; (t %= 32768  ) == (C %= 32768  )
+  && putcha  (C++[S]); } ; } else if(  O==  8) { ; {
+    for(  O = 288; O--; Z[O] = O < 144 ? 8
+    : O < 256 ? 9 : O < 280 ? 7 : 8); V = (B(  288, 5),
+    I); { ; { for(  O = 32; O--;
+    Z[O] = 5); 
+  }
+}
+
+h = (B(  32, 5), I); } ; } else if(  O==  1 && l)
+{
+  ; { { ; } ; { ; } ; { ; } ; { ; }
+  for( ; y < l; y += 8)
+  j |= 0l + getcha()  << y; w = j
+    & (1 << l) - 1;
+    j >>= l; y -= l; } ; } else if(  O==  7) { ; { y % 8 && B(  y % 8, 1);
+      for(  O = B(  16, 1), B(  16, 1); O--; B(  B(  8, 1), 2));
+    } ;
+  }
+  else if(  O==  9) { ; {
+    unsigned  p = B(  5, 1) + 257, z = B(  5, 1) + 1, v = B(  4,
+      1) + 4; { for(  O = 0; O < v; O++[W][Z] = B(  3, 1));
+    for( ; 19 > O; W[O++][Z] = 0); { ;
+  }
+}
+
+V = (B(  19, 5), I);
+{
+  for(  l = O = 0; O < (p + z); ) {
+    I = V; o = B(  3, 3); f = o == 16
+      ? (o = l), 3 + B(  2, 1) : o == 17 ?
+        (o = 0), 3 + B(  3, 1) : o == 18 ? (o = 0),
+          11 + B(  7, 1) : ((l = o), 1); for(  q = f; q--;
+            O++[Z] = o); ; ; ; ; ; { ; }
+}
+
+I = V;
+{
+  B(  9, 4); }
+  V = (B(  p, 5), I);
+  for(  O = z; O--;
+  Z[O] = Z[O+p]);
+  h = (B(  z, 5),
+  I); } ; ; ; } ; ; ; } else if(  O== 
+  4) { ; ; ; { struct x  *
+  i = I; i && (
+  I = i->o, B(  7, 4),
+  I = i->O,
+  free (i), B(  1, 4));
+  } ; }
+  return w;
+}
+
+main ()
+{
+  return B (3, 0);
+}

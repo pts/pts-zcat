@@ -1,0 +1,105 @@
+% vmimage.ps
+% a simplified OC virtual machine, showing images
+% by pts@fazekas.hu at Sat Jul 28 21:11:56 CEST 2001
+% works!! -- Sat Jul 28 22:13:00 CEST 2001
+% Sun Jul 29 11:47:47 CEST 2001
+%
+% Timing: 153250ms user for bash.file
+% Timing:   8240ms user for pts2.pbm
+% Timing:   6790ms user for pts2.pbm, removed `exit's
+% Timing:   6690ms user for pts2.pbm, changed signs
+%
+%
+% Usage: gs -r72 -q vm.ps
+
+% pts2.pbm: w=419 h=534 data_offset=34 size=28336
+% pts2.pbm.gz csize=7520
+
+/Codes [
+  (zcat.psp) run
+] bind def
+
+% Codes === {
+
+/Ram 36000 array def
+/Ip 2 def
+%/Stdin (%stdin) (r) file def
+/Stdin (pts2.pbm.gz) (r) file def
+/Offset 34 def % must be smaller than `AllOut length'
+%/Stdin (alma.gz) (r) file def
+/Stdout (%stdout) (w) file def
+/AllOut 4096 string def
+/Stack [ ] def
+
+/_img_src { % - _img_src <data-string>
+  /SubOut AllOut def
+  mark Stack aload pop
+  {
+    % /Exec ===
+    Codes Ip get exec
+    % /Done ===
+    dup -1 lt { % function call
+      neg
+      Ram 0 get % save arg to stack
+      Ip 1 add  % save return position to stack
+      % Now: <arg> <faddr> <retarg> <retip>
+      4 2 roll
+      /Ip exch def
+      Ram exch 0 exch put
+      % Now: <retarg> <retip>
+    }{
+      dup 2 gt { % JMP
+        /Ip exch def
+      }{
+        /Ip Ip 1 add def
+        dup 0 eq { % getchar()
+          pop pop % forget faddr and arg
+          Stdin read not{-1}if
+        }{
+          dup -1 eq { % putchar()
+            pop % forget faddr
+            % Stdout exch write
+            neg 255 add % negate component brr...!! -- pbm and ps differ!
+            SubOut exch 0 exch put
+            0 % fake retval
+            /SubOut SubOut 1 SubOut length 1 sub getinterval def
+            SubOut length 0 eq{exit}if
+          }{
+            dup 1 eq { % halt
+              % pop pop % forget junk
+              /Ip Ip -1 add def % let it halt again!
+              exit % _halt_
+            }{ % RET
+              pop % forget ..faddr
+              3 1 roll
+              % Now: <retval> <retarg> <retip>
+              /Ip exch def
+              Ram exch 0 exch put
+              % Now: <retval>
+            } ifelse
+          } ifelse
+        } ifelse
+      } ifelse
+    } ifelse
+  } bind loop
+  counttomark array astore exch pop
+  % Now: <new-Stack>
+  /Stack exch def
+  AllOut Offset AllOut length SubOut length sub Offset sub getinterval % return substring
+  /Offset 0 def
+} bind def
+
+%100 100 scale
+%200 200 moveto
+419 534 1
+[1 0 0 -1 0 534]
+{
+  _img_src
+  % /Huh ===
+  dup length 0 eq{pop exit}if
+  % Stdout exch writestring
+} bind
+image showpage
+% loop quit
+
+% } bind === quit

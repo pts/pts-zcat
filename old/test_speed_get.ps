@@ -1,0 +1,87 @@
+%
+% by pts@fazekas.hu at Sun Nov 11 19:28:08 CET 2001
+%
+%
+
+% string:  14,50s  85540bytes
+% array:    6,53s 287900bytes
+% array2:   6,07s 287900bytes
+% dict:     7,26s 635440bytes
+% string1:  6,07s  42708bytes
+
+/vmperf { % <code:no stack garbage please> vmperf -
+  % Somewhat awkward: maybe negative(!) and grows with a factor of >1 for strings.
+  2 vmreclaim vmstatus pop exch pop
+  exch exec
+  2 vmreclaim vmstatus pop exch pop
+  exch sub === flush
+}bind def
+
+%{% method `array'
+%/Ram 36000 array def
+%0 1 35999 { Ram exch 0 put } for
+%}vmperf
+%/xload { % <index> xload <value>
+%  Ram exch get
+%}bind def
+%/xdef { % <index> <newvalue> xdef
+%  Ram 3 1 roll put
+%  %sloow Ram 3 copy pop put pop pop
+%}bind def
+
+%{% method `array2'
+%/Ram 36000 array def
+%0 1 35999 { Ram exch 0 put } for
+%}vmperf
+%/xload { % <index> xload <value>
+%  Ram exch get
+%} dup 0 Ram put bind def
+%/xdef { % <index> <newvalue> xdef
+%  Ram 3 1 roll put
+%} dup 0 Ram put bind def
+
+%{% method `dict'
+%0 1 35999 {0 def} for
+%}vmperf
+%/xload { % <index> xload <value>
+%  load
+%}bind def
+%/xdef { % <index> <newvalue> xdef
+%  def
+%}bind def
+
+%{% method `string'
+%/HIGH 36000 string def
+%/LOW  36000 string def
+%}vmperf
+%/xload { % <index> xload <value>
+%  %** always returns 0..65535
+%  dup HIGH exch get 8 bitshift exch
+%  LOW exch get add
+%}bind def
+%/xdef { % <index> <newvalue> xdef
+%  %** <newvalue> can be in -32768..65535
+%  2 copy -8 bitshift 255 and HIGH 3 1 roll put
+%  255 and LOW 3 1 roll put
+%}bind def
+
+{% method `string1'
+/STR 36000 string def
+}vmperf
+/xload { % <index> xload <value>
+  %** always returns 0..65535
+  STR exch get
+}bind def
+/xdef { % <index> <newvalue> xdef
+  %** <newvalue> can be in -32768..65535
+  STR 3 1 roll put
+}bind def
+
+%{/alma 100 string def}vmperf
+%alma ===
+%quit
+
+%0 1 2000000 {pop 5 -554 xdef 5 xload pop} for
+%0 1 56{pop 0 1 35999 {5 -554 xdef xload pop} for} for
+0 1 56{pop 0 1 35999 {5 222 xdef xload pop} for} for
+quit

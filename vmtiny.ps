@@ -1,0 +1,30 @@
+40 dict begin
+/x{load def}def
+/E/def x
+/B/bind x
+/b/bitshift x
+/i/ifelse x
+/a/add x
+/s/sub x
+/e/eq x
+/n/ne x
+/p/pop x
+/u/dup x
+/t/lt x
+/c/exch x
+/y/and x
+/C/currentdict x
+/BU 32768 string E
+/RA 2600 array E
+/A{counttomark array astore c p}B E
+/L{BU exch get}u 0 BU put E
+/D{BU 3 1 roll 255 and put}u 0 BU put E
+/l{RA exch get}u 0 RA put E
+/d{RA 3 1 roll put}u 0 RA put E
+mark c{mark c{u C c known {C c get u type/arraytype eq{aload p}if}if}forall A
+cvx B}forall A/CO c E
+/IP 2 E/SI(%stdin)(r)file E/SO(%stdout)(w)file E{CO IP get exec u -1 lt{neg 0
+l IP 1 a 4 2 roll/IP c E 0 c d}{u 2 gt{/IP c E}{/IP IP 1 a E u 0 eq{p p SI
+read not{-1}if}{u -1 eq{p SO c write 0}{u 1 eq{p p/IP IP -1 a E exit}{p 3 1
+roll/IP c E 0 c d}i}i}i}i}i}B
+loop end quit

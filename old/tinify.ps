@@ -1,0 +1,101 @@
+% by pts@fazekas.hu at Sat Aug 24 13:52:17 CEST 2002
+
+%<Open>
+save
+%</Open>
+
+88 dict begin % TokDict
+
+%<Abbr ld=x def=E>
+/x {load def} def
+/E /def x
+%<A + add/>
+%<A , and/>
+%<A - sub/>
+%<A . lt/>
+%<A : for/>
+%<A ; getinterval/>
+%<A = eq/>
+%<A @ loop/>
+%<A A currentfile/>
+%<A E def/>
+%<A H 32768/>
+%<A J 32767/>
+%<A O pop/>
+%<A X exit/>
+%<A a packedarray/>
+%<A b bitshift/>
+%<A c exch/>
+%<A g get/>
+%<A i ifelse/>
+%<A j if/>
+%<A r read/>
+%<A t put/>
+%<A u dup/>
+%<A y copy/>
+%<A | -1670420001/>
+%<A ~ ne/>
+/A /currentfile x % TMP!!
+/+ /add x
+/@ /loop x
+/H 32768 E
+
+%</Abbr>
+
+%<TokSubs inlining=0/>
+/TokSubs { %!! function inlining nélkül
+  mark exch{
+    dup xcheck{
+      dup type/arraytype eq{TokSubs}{
+        dup type/nametype eq{
+          dup currentdict exch known {load}if
+        }if
+      }ifelse
+    }if
+  }forall
+  counttomark array astore exch pop cvx
+} bind def
+
+%<Test>
+/S H string E
+11 5 8[1 0 0 -1 0 5] %% akármilyen kódrészlet
+/filter where not %% tesztelõ kódrészlet
+%</Test>
+{ % kézi ág
+  currentfile read pop pop % százalékjel figyelmen kívül hagyása
+%<S len=32768>
+S
+%</S>
+  0 { ... } TokSubs bind loop % tömörített kód kitömörítése S-be
+  % Stack: S. S == CONST . "{" . VAR . CODE "}". CONST konstans értékeket
+  % definiál TokDict-be (currentdict), VAR a változókat definiál kezdõértékkel,
+  % CODE pedig eljárásokat definiál. A vermet CONST, CODE és VAR nem bántja.
+  cvx exec TokSubs bind exec
+  currentfile token pop pop % A %%BeginData utáni exec beolvasása
+%<True>
+  {zzzzzzzzz fW S c 0 c ;}image %% kézi kódrészlet
+%</True>
+}{
+  % beépített ág
+  currentfile token pop pop % A %%BeginData utáni exec beolvasása
+  
+%<False>
+  pop % 
+  /T A/ASCII85Decode filter E
+  /F T/RunLengthDecode filter E
+  F image
+  F closefile T closefile %% beépített kódrészlet vége
+%</False>
+}ifelse
+%{{ScRt}:!/T0E!/m5EHX}i}{!tY4~!tYw  init '{' kézi ághoz tartozó tömörített kód eleje
+%3~,{!/m3E!-1X}j}i}@}{!-1}iw@wE}%%  kódrészlet vége '}' '%' '%'
+%%BeginData
+exec
+#ljo)!<3'!!<<#urr2rurVm*&rrE'!rrE)u!!*&s!<3!&!!*$!rrE)u!!3-"rW!<*!<3'!!<3'!!<<
+#u!<<#u$NC)+rrE'!!<<'!rr2rurr2rurr7K~>
+%%EndData
+%<Fini>
+end restore showpage
+%</Fini>
+%%Trailer
+%%EOF

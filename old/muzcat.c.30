@@ -12,7 +12,7 @@
  * Fri Jul 27 22:20:21 CEST 2001 cleanups, comments, CFG_LANG_ANSIC_SYSCALL, CFG_LANG_ANSIC_LINUX
  * Sat Jul 28 13:25:38 CEST 2001 WHILE etc, CFG_LANG_RUBY, CFG_LANG_PYTHON, muzcat3.ps
  * Sun Jul 29 12:22:59 CEST 2001 cleanups, CFG_LANG_ISOPASCAL
- * Sat Jun 29 22:30:11 CEST 2002 bugfixes, CFG_LANG_GAWK, CFG_LANG_FREEPASCAL, CFG_LANG_XPASCAL
+ * Sat Jun 29 22:30:11 CEST 2002 Makefile, bugfixes, CFG_LANG_GAWK, CFG_LANG_FREEPASCAL, CFG_LANG_XPASCAL
  * Sun Jun 30 23:12:36 CEST 2002 CFG_LANG_XPASCAL now works with Turbo Pascal >=5.5
  *
  *
@@ -22,6 +22,7 @@
  * SUXX: may segfault on invalid file
  *
  * Imp: !! fixup 16-bit arithmetic CFG_LANG_XPASCAL-style
+ * Imp: CFG_LANG_TURBOPASCAL
  * Imp: buffering for Turbo Pascal (CFG_LANG_XPASCAL)
  * Imp: import CFG_OLD_BUFFERING from statecat.c
  * Imp: remove SHL(fvRead(),8) for ZIP
@@ -225,7 +226,6 @@
   #define CONST final
   #define GLOBAL_VAR(type,name) static protected type name;
   #define LOCAL_VAR(type,name) type name;
-  #define LOCAL_VARS(x) x
   #define ENDDOT }
   #define RETURN_VOID(fname)
   #define GLOBAL_ARRAY(type,name,length) static type name[]=new type[length];
@@ -357,7 +357,6 @@
   #define WORD int
   #define GLOBAL_VAR(type,name) type name;
   #define LOCAL_VAR(type,name) type name;
-  #define LOCAL_VARS(x) x
   #define CONST
   #define my_putchar putchar
   #define my_getchar getchar
@@ -407,7 +406,7 @@
   #define fvWrite fvwrite
   #define fvMktree fvmktree
   #define fvRead fvread
-  GLOBAL_ARRAY(WORD,powtwo,16); /* WORD powtwo[16]; */
+  WORD powtwo[16];
   /* void ocinit(NO_ARGS) { */
   /* } */
   int io; /* global var defined early for main() */
@@ -486,7 +485,6 @@
   #define WORD int
   #define GLOBAL_VAR(type,name) type name;
   #define LOCAL_VAR(type,name) type name;
-  #define LOCAL_VARS(x) x
   #define CONST
   #define my_putchar putchar
   #define my_getchar getchar
@@ -621,7 +619,6 @@
   #define WORD int
   #define GLOBAL_VAR(type,name) type name;
   #define LOCAL_VAR(type,name) type name;
-  #define LOCAL_VARS(x) x
   #define CONST
   #define my_putchar putchar
   #define my_getchar getchar
@@ -746,7 +743,6 @@
   #define WORD signed short /* unused */
   #define GLOBAL_VAR(type,name) /* empty! */
   #define LOCAL_VAR(type,name) , name
-  #define LOCAL_VARS(x) x
   #define CONST
   #define RETURN_VOID(fname)
   #define GLOBAL_ARRAY(type,name,length) /* empty! */
@@ -837,11 +833,11 @@
   #define SHR(a,b) ((a)>>(b))
   #define my_putchar putchar
   #define my_getchar getchar
+  #include <stdio.h> /* putchar(), getchar() */
   #define BYTE signed char
   #define WORD signed short
   #define GLOBAL_VAR(type,name) static type name;
   #define LOCAL_VAR(type,name) type name;
-  #define LOCAL_VARS(x) x
   /* #define LOCAL_VAR auto -- also possible */
   #define CONST const
   #define ENDDOT
@@ -868,111 +864,6 @@
     fvMain();
     return 0;
   }
-#elif CFG_LANG_BC
-  /* Fri Jul 12 20:04:14 CEST 2002
-   * Input and output is hex-encoded.
-   * The bc and Ruby versions are significant because of the arbitrary
-   * precision arithmetic.
-   * This produces invalid output now.
-   * test.sh !!
-   *
-   * Test Bash:     ??340ms user
-   * Test Random:   ?? 70ms user
-   * Test Misc:     ??360ms user
-   */
-  #define IGNORE
-  #define NOARGS ()
-  #define LT(a,b)     a<b
-  #define NZ(a)       a
-  #define EQ(a,b)     a==b
-  #define NE(a,b)     a!=b
-  #define SET(a,b)    a=b
-  #define ASET(a,i,b) AREF(a,i)=b
-  #define FUNCODE
-  #define RETURN(fname,value) return(value);
-  #define ALLOW_LOCALS 1
-  #define GLOBAL_REF(varname)
-  #define PASS
-  #define ENDFUN }
-  #define IF(c) if (c) {
-  #define ELSE_IF(c) } else if (c) {
-  #define ELSE } else {
-  #define ENDIF }
-  #define WHILE(c) while (c) {
-  #define ENDWHILE }
-  #undef  SMALLEST_CODE /* do not optimize for smallest code size */
-  #define ENDDOT2
-  #define AREF(aname,idx) aname[idx]
-  #define GLOBAL_INIT_ARRAY(type,name) static CONST type name[]
-  #define ARY {
-  #define YRA }
-  #define DEFUN_0_VOID(name) define name() {;;;
-  #define DEFUN_1_VOID(name,atype) define name(arg) {;;;
-  #define DEFUN_0(rtype,name) define name() {;;;
-  #define DEFUN_1(rtype,name,atype) define name(arg) {;;;
-  #define my_putchar(c) print(c)
-  #define my_getchar()  read()
-  #undef  BYTE
-  #undef  WORD
-  #define GLOBAL_VAR(type,name) /*static type name;*/
-  #define LOCAL_VAR(type,name) , name
-  #define LOCAL_VARS(x) auto dummy x ;
-  #define CONST
-  #define RETURN_VOID(fname)
-  #define GLOBAL_ARRAY(type,name,length) name[length-1]=0; /*static type name[length];*/
-  #define HAVE_ARRAY_INIT 0
-  #define ADD(r,a) r+=(a)
-  #define SUB(r,a) r-=(a)
-  #define SLIDE(r) if (r==32767) { r=0 } else { INCR(r) }
-  #define TAND_1(a) ((a)%2)
-  #define TAND_P(a,p) ((a)/(p)%2)
-  #define TNAND_P(a,p) (0==((a)/(p)%2))
-  #define AND_255(a) ((a)%256)
-  #define AND_7(a) ((a)%8)
-  #define AND_LOW(a,b) ((a)%powtwo[b])
-  #define SET_AND_LOW(var,x,y) SET(var,AND_LOW(x,y))
-  #define TWICE(a) ((a)*2)
-  #define SHL(a,b) ((a)*powtwo[b])
-  #define SHR(a,b) ((a)/powtwo[b])
-  #define INCR(r) r+=1 /* r++ prints to stdout */
-  #define DECR(r) r-=1 /* r-- prints to stdout */
-  #define N n
-  #define D d
-  #define T t
-  #define C c
-  #define J j
-  #define Y y
-  #define Z z
-  #define B b
-  #define G g
-  #define S s
-  #define constW cw
-  #define constU cu
-  #define constP cp
-  #define constQ cq
-  #define constL cl
-  #define fvMain fvmain
-  #define fvNalloc fvnalloc
-  #define fvFree fvfree
-  #define fvDescend fvdescend
-  #define fvWrite fvwrite
-  #define fvMktree fvmktree
-  #define fvRead fvread
-  GLOBAL_ARRAY(WORD,powtwo,16);
-  #define ENDDOT \
-    /*obase=ibase=16;*/ /* <-- would ruin internal constants! */ \
-    io=1; iq=0; while (iq<30) { AREF(constQ,iq)=io+1; INCR(iq); AREF(constQ,iq)=(io*3-(io*3%2))/2+1; INCR(iq); io=TWICE(io); } \
-    AREF(constQ,0)=1; \
-    io=1; iq=0; while (iq<16) { AREF(powtwo,iq)=io; INCR(iq); io=TWICE(io); } \
-    iq=0; while (iq<30) { AREF(constL,iq)=(iq-iq%2)/2-1; INCR(iq); } /* used bool as int */ \
-    AREF(constL,0)=0; AREF(constL,1)=0; \
-    /* AREF(constL,0)=0; AREF(constL,1)=0; AREF(constL,2)=0; AREF(constL,3)=0; AREF(constL,4)=1; AREF(constL,5)=1; AREF(constL,6)=2; AREF(constL,7)=2; AREF(constL,8)=3; AREF(constL,9)=3; AREF(constL,10)=4; AREF(constL,11)=4; AREF(constL,12)=5; AREF(constL,13)=5; AREF(constL,14)=6; AREF(constL,15)=6; AREF(constL,16)=7; AREF(constL,17)=7; AREF(constL,18)=8; AREF(constL,19)=8; AREF(constL,20)=9; AREF(constL,21)=9; AREF(constL,22)=10; AREF(constL,23)=10; AREF(constL,24)=11; AREF(constL,25)=11; AREF(constL,26)=12; AREF(constL,27)=12; AREF(constL,28)=13; AREF(constL,29)=13; */ \
-    AREF(constU,0)=3; AREF(constU,1)=4; AREF(constU,2)=5; AREF(constU,3)=6; AREF(constU,4)=7; AREF(constU,5)=8; AREF(constU,6)=9; AREF(constU,7)=10; AREF(constU,8)=11; AREF(constU,9)=13; AREF(constU,10)=15; AREF(constU,11)=17; AREF(constU,12)=19; AREF(constU,13)=23; AREF(constU,14)=27; AREF(constU,15)=31; AREF(constU,16)=35; AREF(constU,17)=43; AREF(constU,18)=51; AREF(constU,19)=59; AREF(constU,20)=67; AREF(constU,21)=83; AREF(constU,22)=99; AREF(constU,23)=115; AREF(constU,24)=131; AREF(constU,25)=163; AREF(constU,26)=195; AREF(constU,27)=227; AREF(constU,28)=258; \
-    AREF(constW,0)=16; AREF(constW,1)=17; AREF(constW,2)=18; AREF(constW,3)=0; AREF(constW,4)=8; AREF(constW,5)=7; AREF(constW,6)=9; AREF(constW,7)=6; AREF(constW,8)=10; AREF(constW,9)=5; AREF(constW,10)=11; AREF(constW,11)=4; AREF(constW,12)=12; AREF(constW,13)=3; AREF(constW,14)=13; AREF(constW,15)=2; AREF(constW,16)=14; AREF(constW,17)=1; AREF(constW,18)=15; \
-    iq=0; io=0; while (iq<28) { if (iq==4) io=1; AREF(constP,iq)=(iq-iq%4)/4-io; INCR(iq); } /* used bool as int */ \
-    AREF(constP,28)=0; \
-    /* AREF(constP,0)=0; AREF(constP,1)=0; AREF(constP,2)=0; AREF(constP,3)=0; AREF(constP,4)=0; AREF(constP,5)=0; AREF(constP,6)=0; AREF(constP,7)=0; AREF(constP,8)=1; AREF(constP,9)=1; AREF(constP,10)=1; AREF(constP,11)=1; AREF(constP,12)=2; AREF(constP,13)=2; AREF(constP,14)=2; AREF(constP,15)=2; AREF(constP,16)=3; AREF(constP,17)=3; AREF(constP,18)=3; AREF(constP,19)=3; AREF(constP,20)=4; AREF(constP,21)=4; AREF(constP,22)=4; AREF(constP,23)=4; AREF(constP,24)=5; AREF(constP,25)=5; AREF(constP,26)=5; AREF(constP,27)=5; AREF(constP,28)=0; */ \
-    fvMain(); exit;
 #elif CFG_LANG_PIKE
   /* Should work with Pike >=0.5 (even ancient pikes). Tested: pike 0.5.
    *
@@ -1018,8 +909,7 @@
   #define WORD int
   #define GLOBAL_VAR(type,name) type name;
   #define LOCAL_VAR(type,name) type name;
-  /* ^^^ #define LOCAL_VAR auto -- also possible */
-  #define LOCAL_VARS(x) x
+  /* #define LOCAL_VAR auto -- also possible */
   #define CONST
   #define ENDDOT
   #define RETURN_VOID(fname)
@@ -1090,11 +980,10 @@
   #define GLOBAL_VAR(type,name) var name: type;
   #define LOCAL_VAR(type,name) var name: type;
   /* #define LOCAL_VAR auto -- also possible */
-  #define LOCAL_VARS(x) x
   #define CONST const
   #define RETURN_VOID(fname)
   /* #define RETURN_VOID(fname) fname:=0; */
-  #define GLOBAL_ARRAY(type,name,length) var name: array[0.. length-1] of type;
+  #define GLOBAL_ARRAY(type,name,length) var name: array[0..length-1] of type;
   #undef  HAVE_ARRAY_INIT
   #define ADD(r,a) r:=r+(a)
   #define SUB(r,a) r:=r-(a)
@@ -1162,8 +1051,7 @@
       fvMain; ;;;\
     end.
 #elif CFG_LANG_XPASCAL
-  /* Works with gpc and Turbo Pascal >=5.5. Doesn't work with Free Pascal
-   * (creates empty file).
+  /* Works with gpc and Turbo Pascal >=5.5.
    */
   #define IGNORE ignore:=
   #define NOARGS
@@ -1202,11 +1090,10 @@
   #define GLOBAL_VAR(type,name) var name: type;
   #define LOCAL_VAR(type,name) var name: type;
   /* #define LOCAL_VAR auto -- also possible */
-  #define LOCAL_VARS(x) x
   #define CONST const
   #define RETURN_VOID(fname)
   /* #define RETURN_VOID(fname) fname:=0; */
-  #define GLOBAL_ARRAY(type,name,length) var name: array[0.. length-1] of type;
+  #define GLOBAL_ARRAY(type,name,length) var name: array[0..length-1] of type;
   #undef  HAVE_ARRAY_INIT
   #define ADD(r,a) r:=r+(a)
   #define SUB(r,a) r:=r-(a)
@@ -1241,10 +1128,10 @@
   var ignore: integer; f: file of char;
   function getchar: integer;
     var
-      u: char;
+      c: char;
     begin
       if eof(f) then getchar:=-1
-                else begin read(f,u); getchar:=ord(u); end;
+                else begin read(f,c); getchar:=ord(c); end;
   end;
   GLOBAL_ARRAY(WORD,powtwo,16)
   GLOBAL_VAR(WORD,io)
@@ -1316,11 +1203,10 @@
   #define GLOBAL_VAR(type,name) var name: type;
   #define LOCAL_VAR(type,name) var name: type;
   /* #define LOCAL_VAR auto -- also possible */
-  #define LOCAL_VARS(x) x
   #define CONST
   #define RETURN_VOID(fname)
   /* #define RETURN_VOID(fname) fname:=0; */
-  #define GLOBAL_ARRAY(type,name,length) var name: array[0.. length-1] of type;
+  #define GLOBAL_ARRAY(type,name,length) var name: array[0..length-1] of type;
   #undef  HAVE_ARRAY_INIT
   #define ADD(r,a) r:=r+(a)
   #define SUB(r,a) r:=r-(a)
@@ -1385,7 +1271,7 @@
       fvMain; ;;;\
     end.
 #elif CFG_LANG_FREEPASCAL
-  /* Compile: ppc386 -vewnhi -Xs -oa zcat.pas
+  /* Compile: ppc386 -vewnhi -Cx -Xs -oa zcat.pas
    *
    * See FAQ answer 10e for compatibility notes.
    */
@@ -1425,12 +1311,11 @@
   #define WORD integer
   #define GLOBAL_VAR(type,name) var name: type;
   #define LOCAL_VAR(type,name) var name: type;
-  /* ^^^ #define LOCAL_VAR auto -- also possible */
-  #define LOCAL_VARS(x) x
+  /* #define LOCAL_VAR auto -- also possible */
   #define CONST const
   #define RETURN_VOID(fname)
   /* #define RETURN_VOID(fname) fname:=0; */
-  #define GLOBAL_ARRAY(type,name,length) var name: array[0.. length-1] of type;
+  #define GLOBAL_ARRAY(type,name,length) var name: array[0..length-1] of type;
   #undef  HAVE_ARRAY_INIT
   #define ADD(r,a) r:=r+(a)
   #define SUB(r,a) r:=r-(a)
@@ -1541,7 +1426,6 @@
   #define WORD unused_type_WORD
   #define GLOBAL_VAR(type,name) my(name);
   #define LOCAL_VAR(type,name) my(name);
-  #define LOCAL_VARS(x) x
   #define CONST const
   #define ENDDOT fvMain();
   #define RETURN_VOID(fname)
@@ -1629,7 +1513,6 @@
   #define WORD unused_type_WORD
   #define GLOBAL_VAR(type,name) name=nil;
   #define LOCAL_VAR(type,name) name=nil;
-  #define LOCAL_VARS(x) x
   #define CONST const
   #define ENDDOT fvMain();
   #define RETURN_VOID(fname)
@@ -1724,7 +1607,6 @@
   #define WORD unused_type_WORD
   #define GLOBAL_VAR(type,name) name=None;
   #define LOCAL_VAR(type,name) name=None;
-  #define LOCAL_VARS(x) x
   #define CONST const
   #define ENDDOT fvMain();
   #define RETURN_VOID(fname)
@@ -1795,8 +1677,7 @@
 #define WORD unsigned short /* >=16 bits; works either unsigned or signed */
 #define GLOBAL_VAR(type,name)  static type name;
 #define LOCAL_VAR(type,name) type name;
-  /* ^^^ #define LOCAL_VAR auto -- also possible */
-#define LOCAL_VARS(x) x
+  /* #define LOCAL_VAR auto -- also possible */
 #define CONST const
 #define ENDDOT
    /* ^^^ Imp: do we need this? does K&R C have `void'? as return type? */
@@ -1864,8 +1745,7 @@
   #define WORD unsigned short /* >=16 bits; works either unsigned or signed */
   #define GLOBAL_VAR(type,name)  static type name;
   #define LOCAL_VAR(type,name) type name;
-  /* ^^^ #define LOCAL_VAR auto -- also possible */
-  #define LOCAL_VARS(x) x
+  /* #define LOCAL_VAR auto -- also possible */
   #define CONST const
   #define ENDDOT
   #define RETURN_VOID(fname)
@@ -1916,7 +1796,8 @@
     flush_putchar(0); /* flush remaining bytes to STDOUT */
     return 0;
   }
-#elif CFG_LANG_ANSIC_LINUX /* ANSI C, with Linux i386 kernel syscalls read(2) and write(2) */
+#elif CFG_LANG_ANSIC_LINUX /* ANSI C, with Linux kernel syscalls read(2) and write(2) */
+  /* please link me with `ld -e _niam_' */
   #define IGNORE
   #define NOARGS ()
   #define LT(a,b)     a<b
@@ -1954,8 +1835,7 @@
   #define WORD unsigned short /* >=16 bits; works either unsigned or signed */
   #define GLOBAL_VAR(type,name)  static type name;
   #define LOCAL_VAR(type,name) type name;
-  /* ^^^ #define LOCAL_VAR auto -- also possible */
-  #define LOCAL_VARS(x) x
+  /* #define LOCAL_VAR auto -- also possible */
   #define CONST const
   #define ENDDOT
   #define RETURN_VOID(fname)
@@ -1976,38 +1856,10 @@
   #define DECR(r) ((r)--)
 
   /* vvv Linux kernel magic */  
-  #define __NR_myexit 1
-  #define __NR_read 3
-  #define __NR_write 4
-  static int errno;
-  #define __syscall_return(type, res) \
-  do { \
-    if ((unsigned long)(res) >= (unsigned long)(-200)) { \
-      errno = -(res); \
-      res = -1; \
-    } \
-    return (type) (res); \
-  } while (0)
-  #define _syscall1(type,name,type1,arg1) \
-  static __inline__ type name(type1 __##arg1) { \
-  long __res; \
-  __asm__ __volatile__ ("int $0x80" \
-    : "=a" (__res) \
-    : "0" (__NR_##name),"b" ((long)(__##arg1))); \
-  __syscall_return(type,__res); \
-  }
-  #define _syscall3(type,name,type1,arg1,type2,arg2,type3,arg3) \
-  static __inline__ type name(type1 __##arg1,type2 __##arg2,type3 __##arg3) { \
-  long __res; \
-  __asm__ __volatile__ ("int $0x80" \
-    : "=a" (__res) \
-    : "0" (__NR_##name),"b" ((long)(__##arg1)),"c" ((long)(__##arg2)), \
-        "d" ((long)(__##arg3))); \
-  __syscall_return(type,__res); \
-  }
-  _syscall1(int,myexit,int,exitcode)
-  _syscall3(int,write,int,fd,const char *,buf,int,count)
-  _syscall3(int,read,int,fd,char *,buf,int,count)
+  #define __KERNEL_SYSCALLS__
+  #include <linux/types.h>   
+  #include <linux/unistd.h>
+  int errno; /* not extern! */
 
   #define BUFSIZE 4096
   static char rbuf[BUFSIZE], *rend=rbuf+BUFSIZE, *rp=rbuf+BUFSIZE;
@@ -2032,12 +1884,12 @@
   }
 
   static void fvMain(void);
-  int _start(int argc, char **argv);
-  int _start(int argc, char **argv) {
+  int _niam_(int argc, char **argv);
+  int _niam_(int argc, char **argv) {
     (void)argc; (void)argv;
     fvMain();
     flush_putchar(0); /* flush remaining bytes to STDOUT */
-    myexit(0);
+    _exit(0);
     return 0;
   }
 #elif CFG_LANG_ANSICAD
@@ -2087,8 +1939,7 @@
   #define WORD unsigned short /* >=16 bits; works either unsigned or signed */
   #define GLOBAL_VAR(type,name)  static type name;
   #define LOCAL_VAR(type,name) type name;
-  /* ^^^ #define LOCAL_VAR auto -- also possible */
-  #define LOCAL_VARS(x) x
+  /* #define LOCAL_VAR auto -- also possible */
   #define CONST const
   #define ENDDOT
   #define RETURN_VOID(fname)
@@ -2165,8 +2016,7 @@
   #define WORD unsigned short /* >=16 bits; works either unsigned or signed */
   #define GLOBAL_VAR(type,name)  static type name;
   #define LOCAL_VAR(type,name) type name;
-  /* ^^^ #define LOCAL_VAR auto -- also possible */
-  #define LOCAL_VARS(x) x
+  /* #define LOCAL_VAR auto -- also possible */
   #define CONST const
   #define ENDDOT
   #define RETURN_VOID(fname)
@@ -2356,10 +2206,8 @@ AFTER_GLOBALS
 DEFUN_1(WORD,fvRead,WORD)
   GLOBAL_REF(Y)
   GLOBAL_REF(J)
-  LOCAL_VARS(
-    LOCAL_VAR(WORD,roo)
-    LOCAL_VAR(WORD,rf)
-  )
+  LOCAL_VAR(WORD,roo)
+  LOCAL_VAR(WORD,rf)
   FUNCODE
   /* Assert: 0<=J && J<=32767 */
   IF(NZ(arg))
@@ -2410,9 +2258,7 @@ ENDFUN
 DEFUN_0(NODEN,fvNalloc)
   GLOBAL_REF(N)
   GLOBAL_REF(D)
-  LOCAL_VARS(
-    LOCAL_VAR(NODEN,no) /* the first/next free node */
-  )
+  LOCAL_VAR(NODEN,no) /* the first/next free node */
   FUNCODE
   SET(no,D);
 #if 0
@@ -2484,12 +2330,10 @@ DEFUN_1(NODEN,fvMktree,WORD)
   GLOBAL_REF(G)
   GLOBAL_REF(N)
   GLOBAL_REF(Z)
-  LOCAL_VARS(
-    LOCAL_VAR(WORD,moo)
-    LOCAL_VAR(WORD,mq)
-    LOCAL_VAR(WORD,mo)
-    LOCAL_VAR(WORD,mf)
-  )
+  LOCAL_VAR(WORD,moo)
+  LOCAL_VAR(WORD,mq)
+  LOCAL_VAR(WORD,mo)
+  LOCAL_VAR(WORD,mf)
   FUNCODE
   /* NODEN anode; */
 #if SMALLEST_CODE
@@ -2588,35 +2432,33 @@ DEFUN_0_VOID(fvMain)
   GLOBAL_REF(T)
   GLOBAL_REF(N)
   GLOBAL_REF(D)
-  LOCAL_VARS(
-    LOCAL_VAR(WORD,o)
-    LOCAL_VAR(WORD,q)
-    LOCAL_VAR(WORD,ty) /* type of input file */
-    /* vvv sub-locals */
-    LOCAL_VAR(WORD,oo)
-    LOCAL_VAR(WORD,ooo)
-    LOCAL_VAR(WORD,oooo)
-    LOCAL_VAR(WORD,f)
-    LOCAL_VAR(WORD,p)
-    LOCAL_VAR(WORD,x)
-    /**
-     * Root of the literal--length Huffman tree in <code>N</code>
-     * (see RFC 1951). Its length is at most 288 with values 0..287. Values
-     * 286 and 287 are invalid. A value in 0..255 means a literal byte, a
-     * value of 256 indicates end-of-block, and a
-     * value in 257..285 is a prefix (with 29 possible values) of a length
-     * in 3..258. See subsubsection 3.2.5 of RFC 1951.
-     */
-    LOCAL_VAR(NODEN,v)
-    /**
-     * Root of the distance Huffman tree in <code>N</code> (see RFC 1951).
-     * Its length is at most 32 with values 0..31. Values 30 and 31 are invalid.
-     * A value of 0..29 is a prefix (with 30 possible values) of a distance in
-     * 1..32768. See subsubsection 3.2.5 of RFC 1951.
-     */
-    LOCAL_VAR(NODEN,h)
-  )
-  
+  LOCAL_VAR(WORD,o)
+  LOCAL_VAR(WORD,q)
+  LOCAL_VAR(WORD,ty) /* type of input file */
+  /* vvv sub-locals */
+  LOCAL_VAR(WORD,oo)
+  LOCAL_VAR(WORD,ooo)
+  LOCAL_VAR(WORD,oooo)
+  LOCAL_VAR(WORD,f)
+  LOCAL_VAR(WORD,p)
+  LOCAL_VAR(WORD,x)
+  /**
+   * Root of the literal--length Huffman tree in <code>N</code>
+   * (see RFC 1951). Its length is at most 288 with values 0..287. Values
+   * 286 and 287 are invalid. A value in 0..255 means a literal byte, a
+   * value of 256 indicates end-of-block, and a
+   * value in 257..285 is a prefix (with 29 possible values) of a length
+   * in 3..258. See subsubsection 3.2.5 of RFC 1951.
+   */
+  LOCAL_VAR(NODEN,v)
+  /**
+   * Root of the distance Huffman tree in <code>N</code> (see RFC 1951).
+   * Its length is at most 32 with values 0..31. Values 30 and 31 are invalid.
+   * A value of 0..29 is a prefix (with 30 possible values) of a distance in
+   * 1..32768. See subsubsection 3.2.5 of RFC 1951.
+   */
+  LOCAL_VAR(NODEN,h)
+
   FUNCODE
   SET(ty,FMT_NONE);
 #ifdef CFG_MULTIPLE
@@ -2697,7 +2539,7 @@ DEFUN_0_VOID(fvMain)
     ELSE_IF(EQ(ty,31)) /* gzip/RFC 1952 format */
       /* fprintf(stderr,"gzip!\n"); */
       /* SET(ty,FMT_GZIP); */
-      /* The most simple gzip header (10 bytes):
+      /* The most simple gzip header (10 bytes): 
        * ID1   hex 0x1f == dec 31 == FMT_GZIP
        * ID2   hex 0x8b
        * CM    hex 0x08

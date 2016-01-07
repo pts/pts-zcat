@@ -1,0 +1,1017 @@
+/* statecat.c -- a stateful minimalistic zcat (gzip -cd) implementation
+ * originally rcm.c
+ * original author: Ron McFarland <rcm@one.net>, 1996
+ * formally muzcat.c (at Tue Dec 25 11:07:47 CET 2001)
+ * rewritten, restructured and extended by pts@fazekas.hu at
+ * Tue Dec 25 11:08:11 CET 2001
+ *
+ * my_getchar() returns 0..255 or -1 (or a very large integer) on EOF
+ * Imp: fxRead8(); fxRead8(); instead of fxRead16(); ??
+ */
+
+#ifdef MUZCAT_NO_DEFAULT
+#else
+#define CFG_INPUT_FILE 1
+#define CFG_MULTIPLE 1
+#undef  CFG_OLD_BUFFERING
+#endif
+
+/* Imp: #undef more */
+#undef my_getchar
+#undef my_putchar
+#undef BYTE
+#undef WORD
+#undef ENDDOT
+#undef ARRAY
+#undef SHR
+#undef SHL
+#undef ADD
+#undef SUB
+#undef HAVE_ARRAY_INIT
+#undef DEFUN_0
+#undef DEFUN_1
+#undef DEFUN_0_VOID
+#undef DEFUN_1_VOID
+#undef ARY
+#undef YRA
+#undef GLOBAL_INIT_ARRAY
+#undef GLOBAL_ARRAY
+#undef AREF
+#undef GLOBAL_VAR
+#undef LOCAL_VAR
+#undef ENDDOT2
+#undef SMALLEST_CODE
+#undef IF
+#undef ELSE
+#undef ELSE_IF
+#undef ENDIF
+#undef WHILE
+#undef ENDWHILE
+#undef ENDFUN
+#undef PASS
+#undef GLOBAL_REF
+#undef AFTER_GLOBALS
+#define AFTER_GLOBALS
+#undef ALLOW_LOCALS
+#undef RETURN
+#undef RETURN_VOID
+#undef FUNCODE
+#undef EQ
+#undef NE
+#undef SET
+#undef ASET
+#undef NZ
+#undef NOARGS
+#undef IGNORE
+#undef GETCHAR_NEGATIVE
+#undef HAVE_NO_MODIFIED_OPS
+#undef NEED_ASCII85DECODE
+#undef HAVE_SPECIAL_DIVISION
+
+#if CFG_LANG_ANSIC_SIGNED
+  /* Compile: gcc -s -O3 -DCFG_LANG_ANSIC_SIGNED=1 -ansi -pedantic -W -Wall -Wstrict-prototypes -Wtraditional -Wnested-externs -Wpointer-arith -Wbad-function-cast -Wcast-qual -Wmissing-prototypes -Winline -Wmissing-declarations munzip.c
+   *
+   * a.out: 6660 bytes
+   * Test Bash:     340ms user
+   * Test Random:    70ms user
+   * Test Misc:     360ms user
+   */
+  #define IGNORE
+  #define NOARGS ()
+  #define LT(a,b)     a<b
+  #define NZ(a)       a
+  #define EQ(a,b)     a==b
+  #define NE(a,b)     a!=b
+  #define SET(a,b)    a=b
+  #define ASET(a,i,b) AREF(a,i)=b
+  #define FUNCODE
+  #define RETURN(fname,value) return value;
+  #define ALLOW_LOCALS 1
+  #define GLOBAL_REF(varname)
+  #define PASS
+  #define ENDFUN }
+  #define IF(c) if (c) {
+  #define ELSE_IF(c) } else if (c) {
+  #define ELSE } else {
+  #define ENDIF }
+  #define WHILE(c) while (c) {
+  #define ENDWHILE }
+  #undef SMALLEST_CODE /* do not optimize for smallest code size */
+  #define ENDDOT2
+  #define AREF(aname,idx) aname[idx]
+  #define GLOBAL_INIT_ARRAY(type,name) static CONST type name[]
+  #define ARY {
+  #define YRA }
+  #define DEFUN_0_VOID(name) static void name(void) {
+  #define DEFUN_1_VOID(name,atype) static void name(atype arg) {
+  #define DEFUN_0(rtype,name) static rtype name(void) {
+  #define DEFUN_1(rtype,name,atype) static rtype name(atype arg) {
+  #define SHL(a,b) ((a)<<(b))
+  #define SHR(a,b) ((a)>>(b))
+  #define my_putchar putchar
+  #define my_getchar getchar
+  #include <stdio.h> /* putchar(), getchar() */
+  #include <assert.h>
+  #define BYTE signed char
+  #define WORD signed short
+  #define GLOBAL_VAR(type,name) static type name;
+  #define LOCAL_VAR(type,name) type name;
+  /* #define LOCAL_VAR auto -- also possible */
+  #define CONST const
+  #define ENDDOT
+  #define VOID void
+  #define RETURN_VOID(fname)
+  #define GLOBAL_ARRAY(type,name,length) static type name[length];
+  #define HAVE_ARRAY_INIT 1
+  #define ADD(r,a) ((r)+=(a))
+  #define SUB(r,a) ((r)-=(a))
+  #define SLIDE(r) (r)++; (r)&=32767
+  #define TAND_1(a) (0!=((a)&1))
+  #define TAND_P(a,p) (0!=((a)&(p)))
+  #define TNAND_P(a,p) (0==((a)&(p)))
+  #define AND_255(a) ((a)&255)
+  #define AND_7(a) ((a)&7)
+  #define AND_LOW(a,b) ((a)&((1<<(b))-1))
+  #define TWICE(a) ((a)<<1)
+  #define INCR(r) ((r)++)
+  #define DECR(r) ((r)--)
+#else /* ANSI C, with unsigned integers */
+  /* Compile: gcc -s -O3 -DCFG_LANG_ANSIC=1 -ansi -pedantic -W -Wall -Wstrict-prototypes -Wtraditional -Wnested-externs -Wpointer-arith -Wbad-function-cast -Wcast-qual -Wmissing-prototypes -Winline -Wmissing-declarations munzip.c
+   *
+   * a.out: 6660 bytes
+   * Test Bash:     350ms user
+   * Test Random:    70ms user
+   * Test Misc:     370ms user
+   */
+  #undef  CFG_LANG_ANSIC
+  #define CFG_LANG_ANSIC 1
+  #define IGNORE
+  #define NOARGS ()
+  #define LT(a,b)     a<b
+  #define NZ(a)       a
+  #define EQ(a,b)     a==b
+  #define NE(a,b)     a!=b
+  #define SET(a,b)    a=b
+  #define ASET(a,i,b) AREF(a,i)=b
+  #define FUNCODE
+  #define RETURN(fname,value) return value;
+  #define ALLOW_LOCALS 1
+  #define GLOBAL_REF(varname)
+  #define PASS
+  #define ENDFUN }
+  #define IF(c) if (c) {
+  #define ELSE_IF(c) } else if (c) {
+  #define ELSE } else {
+  #define ENDIF }
+  #define WHILE(c) while (c) {
+  #define ENDWHILE }
+  #undef SMALLEST_CODE /* do not optimize for smallest code size */
+  #define ENDDOT2
+  #define AREF(aname,idx) aname[idx]
+  #define GLOBAL_INIT_ARRAY(type,name) static CONST type name[]
+  #define ARY {
+  #define YRA }
+  #define DEFUN_0_VOID(name) static void name(void) {
+  #define DEFUN_1_VOID(name,atype) static void name(atype arg) {
+  #define DEFUN_0(rtype,name) static rtype name(void) {
+  #define DEFUN_1(rtype,name,atype) static rtype name(atype arg) {
+  #define SHL(a,b) ((a)<<(b))
+  #define SHR(a,b) ((a)>>(b))
+  /* used library functions */
+  #define my_putchar putchar
+  #define my_getchar getchar
+  #include <stdio.h> /* putchar(), getchar() */
+  #include <assert.h>
+  /* used integer types, except for main() */
+  #define BYTE unsigned char /* 8 bits */
+  #define WORD unsigned short /* >=16 bits; works either unsigned or signed */
+  #define GLOBAL_VAR(type,name)  static type name;
+  #define LOCAL_VAR(type,name) type name;
+  /* #define LOCAL_VAR auto -- also possible */
+  #define CONST const
+  #define ENDDOT
+  #define VOID void
+  #define RETURN_VOID(fname)
+  #define GLOBAL_ARRAY(type,name,length) static type name[length];
+  #define HAVE_ARRAY_INIT 1
+  #define ADD(r,a) ((r)+=(a))
+  #define SUB(r,a) ((r)-=(a))
+  #define SLIDE(r) (r)++; (r)&=32767
+  #define TAND_1(a) (0!=((a)&1))
+  #define TAND_P(a,p) (0!=((a)&(p)))
+  #define TNAND_P(a,p) (0==((a)&(p)))
+  #define AND_255(a) ((a)&255)
+  #define AND_7(a) ((a)&7)
+  #define AND_LOW(a,b) ((a)&((1<<(b))-1))
+  #define TWICE(a) ((a)<<1)
+  #define INCR(r) ((r)++)
+  #define DECR(r) ((r)--)
+#endif
+
+/* datatype declarations
+ * It would be simple to define a struct for the binary Huffmann tree we
+ * need for decompression as:
+ * 
+ *      struct node {
+ *        struct node *left, *right;
+ *        WORD value;
+ *      };
+ * 
+ * But this approach would mean that we would need `pointer's. Many programming
+ * languages don't have pointers, so the program would be less portable (but
+ * the source would be more readable). So we use the array `N' for representing
+ * nodes (one WORD for left, one WORD for right, one WORD for value). Nodes
+ * are addressed with their node number (NODEN) in the array N. Every NODEN is
+ * divisible by 3. `F' points to the first free node. Free nodes have their
+ * left pointer pointing to the next free node. There is always a `next' free
+ * node (i.e we don't have to deal with out-of-memory errors) beacuse the gzip
+ * algorithm guarantees that the array `N' never exhausts.
+ *
+ * The following formula is true but not sharp: 1998 > 3*2*(286+2+30+2), one
+ * has too examine the RFC again :-(. Empirically: 1996 and 1997 are not enough,
+ * 1998 is. 1998 == 3*2*(286+2+30+2+13).
+ */
+#undef NULL
+#define NULL 0
+#undef NODEN
+#define NODEN WORD
+#define NODESIZE 1998 /* NODESIZE%3==0 */
+/**
+ * Index of the first free node in <code>N</code>.
+ */
+GLOBAL_VAR(NODEN,D)
+#define LEFT(noden)  (AREF(N,(noden)+0)) /* unused */
+#define RIGHT(noden) (AREF(N,(noden)+1)) /* unused */
+#define NVAL(noden)  (AREF(N,(noden)+2)) /* unused */
+
+/* constant arrays (lookup tables) */
+#if HAVE_ARRAY_INIT
+  GLOBAL_INIT_ARRAY(WORD,constW) = ARY 16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15 YRA;
+  GLOBAL_INIT_ARRAY(WORD,constU) = ARY 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258 YRA;
+  GLOBAL_INIT_ARRAY(WORD,constP) = ARY 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0 YRA;
+  GLOBAL_INIT_ARRAY(WORD,constQ) = ARY 1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577 YRA;
+  GLOBAL_INIT_ARRAY(WORD,constL) = ARY 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13 YRA;
+#else
+  GLOBAL_ARRAY(WORD, constW,19)
+  GLOBAL_ARRAY(WORD, constU,29)
+  GLOBAL_ARRAY(WORD, constP,29)
+  GLOBAL_ARRAY(WORD, constQ,30)
+  GLOBAL_ARRAY(WORD, constL,30)
+#endif
+
+GLOBAL_VAR(WORD,C) /* index (in S) of the oldest char, [0..32767] */
+GLOBAL_VAR(WORD,T) /* index (in S) of the first free position, [0..32767] */
+
+
+/**
+ * Contains the code word lengths used for Huffman code generation in
+ * fvMktree(). 320==288+32. 320 is large enough to hold both the code lengths
+ * of the literal--length (288) and the distance (32) Huffman trees -- and
+ * large enough to hold the auxilary Huffman tree (used for building the
+ * real tree) of length 19.
+ */
+GLOBAL_ARRAY(WORD,Z,320)
+
+GLOBAL_ARRAY(WORD,B,17)
+GLOBAL_ARRAY(WORD,G,17)
+
+#if ALLOW_LOCALS
+  #define no o
+  #define rf f
+  #define roo oo
+  #define moo oo
+  #define mq q
+  #define mo o
+  #define mf f
+#else
+  GLOBAL_VAR(NODEN,no)
+  GLOBAL_VAR(WORD,roo)
+  GLOBAL_VAR(WORD,rf)
+  GLOBAL_VAR(WORD,moo)
+  GLOBAL_VAR(WORD,mq)
+  GLOBAL_VAR(WORD,mo)
+  GLOBAL_VAR(WORD,mf)
+  GLOBAL_VAR(WORD,o)
+  GLOBAL_VAR(WORD,q)
+  GLOBAL_VAR(WORD,ty)
+  GLOBAL_VAR(WORD,oo)
+  GLOBAL_VAR(WORD,ooo)
+  GLOBAL_VAR(WORD,oooo)
+  GLOBAL_VAR(WORD,f)
+  GLOBAL_VAR(WORD,p)
+  GLOBAL_VAR(WORD,v)
+  GLOBAL_VAR(WORD,h)
+  GLOBAL_VAR(WORD,x)
+  #undef LOCAL_VAR
+  #define LOCAL_VAR(a,b)
+#endif
+
+GLOBAL_ARRAY(WORD,N,NODESIZE)
+#if HAVE_SPECIAL_DIVISION
+  /* Special division trick to emulate the long char array, for CFG_LANG_OCPS */
+  #define AREF_S(idx) (idx)/-1
+  #define ASET_S(idx,val) (idx)/(val)
+#else
+  GLOBAL_ARRAY(BYTE,S,32768)
+  #define AREF_S(idx) AREF(S,idx)
+  #define ASET_S(idx,val) ASET(S,idx,val)
+#endif
+
+AFTER_GLOBALS
+
+#if 1
+
+/**
+ * A buffer of 16 bits for storing bits read but not processed yet. Needed
+ * because we can read only bytes, not bits with getchar(). Was 32 bits,
+ * but could be reduced.
+ * Used by only fvRead().
+ */
+GLOBAL_VAR(WORD,J)
+/**
+ * The number of bits in the buffer <code>J</code>. Used only in fvRead();
+ */
+GLOBAL_VAR(WORD,Y)
+
+static void fxInit(void) {
+  J=0; Y=0;
+}
+
+
+DEFUN_0(WORD,fxRead8)
+  assert(Y==0);
+  return my_getchar();
+ENDFUN
+DEFUN_0(WORD,fxRead16)
+  WORD w=my_getchar();
+  assert(Y==0);
+  ADD(w, SHL(my_getchar(),8));
+  return w;
+ENDFUN
+DEFUN_0(WORD,fxRead16z)
+  WORD w=my_getchar();
+  assert(Y==0);
+  ADD(w, SHL(my_getchar(),8));
+  return w;
+ENDFUN
+
+/**
+ * Reads <code>param</code> bits from input.
+ * @param param number of bits to read
+ * @return WORD, consisting of the bits
+ * @whichcode 1
+ */
+DEFUN_1(WORD,fvRead,WORD)
+  GLOBAL_REF(Y)
+  GLOBAL_REF(J)
+  LOCAL_VAR(WORD,roo)
+  LOCAL_VAR(WORD,rf)
+  FUNCODE
+  IF(NZ(arg))
+    assert(0<=Y*2 && Y<=7);
+    /* ^^^ Dat: Y*2: avoid GCC warning */
+    assert(1<=arg && arg<=13);
+    /* if (Y>7 || arg>16) abort(); */
+    /* J can hold at most 16 bits, may be signed or unsigned */
+    IF(LT(Y+7,arg))
+      /* ^^^ `if' is ok instead of `while', because of the asserts above */
+      ADD(J,SHL(AND_255(my_getchar()),Y));
+      ADD(Y,8);
+    ENDIF
+    assert(arg <= Y+8);
+    IF(LT(Y,arg)) /* Y < arg <= Y+8 */
+      SET(rf,AND_255(my_getchar()));
+      IF(EQ(arg,16))
+        assert(8<=Y && Y<=15);
+        SET(roo,J+SHL(AND_LOW(rf,16-Y),Y));
+        SET(J,SHR(rf, 16-Y)); /* 1 <= 16-Y <= 7, it's safe to call SHR */
+      ELSE
+        SET(roo,AND_LOW(J+SHL(rf,Y), arg));
+        SET(J,SHR(rf, arg-Y)); /* 0<=f && f<=255, no need to cast to unsigned */
+        /* ^^^ 1<=arg-Y && arg-Y<=7, so it's safe to call SHR */
+      ENDIF
+      ADD(Y, 8-arg); /* 8-arg may be negative, but Y remains nonnegative */
+    ELSE /* Y >= arg */
+      assert(1<=Y && Y<=15);
+      SET(roo,AND_LOW(J, arg));
+      SUB(Y,arg);
+      SET(J,AND_LOW(SHR(J, arg), Y)); /* J >>= arg; */
+      /* ^^^ this has been corrected to be signedness-independent */
+      /* ^^^ 1<=arg && arg<=8, so it's safe to call SHR */
+    ENDIF
+    /* fprintf(stderr, "read %d\n", roo&0xffff); */
+  ELSE
+    SET(roo,0);
+  ENDIF
+  assert(0<=Y*2 && Y<=7);
+  /* ^^^ Dat: Y*2: avoid GCC warning */
+  /* fprintf(stderr, "fvRead(%d)=%d\n", arg, roo); */
+  RETURN(fvRead,roo)
+ENDFUN
+
+static void fxSkip(void) {
+  IGNORE fvRead(AND_7(Y));
+}
+
+#else
+
+
+#endif
+
+#define fvReadq fvRead
+
+
+/** 
+ * Allocates a new node and initializes it with empty content. This function
+ * lets us get rid of the global variable F (which was buggily uninitialized
+ * in the original scm.c).
+ * @return pointer to the newly allocated node
+ * @whichcode -1
+ */
+DEFUN_0(NODEN,fvNalloc)
+  GLOBAL_REF(N)
+  GLOBAL_REF(D)
+  LOCAL_VAR(NODEN,no) /* the first/next free node */
+  FUNCODE
+  SET(no,D);
+#if 0
+  if (no>NODESIZE) abort(); /* abort if out of memory */
+#endif  
+  SET(D,AREF(N,no)); /* not free anymore */
+  ASET(N,no,NULL); /* clear; the other two fields are already cleared */
+  /* N[n+1)=NULL; N[n+2)=0; */
+  /* fprintf(stderr, "alloc %d\n", n); */
+  RETURN(fvNalloc,no)
+ENDFUN
+
+/**
+ * Frees the Huffman tree originating from <code>root</code> recursively.
+ * Used <code>I</code> as input only.
+ * Moved <code>I</code> into a argeter.
+ * @param arg root node index in N
+ */
+DEFUN_1_VOID(fvFree,NODEN)
+  GLOBAL_REF(N)
+  GLOBAL_REF(D)
+  FUNCODE
+  IF(NE(arg,NULL))
+    fvFree(AREF(N,arg));
+    fvFree(AREF(N,arg+1));
+    /* fprintf(stderr, "free %d\n", arg); */
+    ASET(N,arg+1,NULL); /* clear */
+    ASET(N,arg+2,0); /* clear */
+    ASET(N,arg,D); /* link to the beginning of the free list */
+    SET(D,arg); /* set it free */
+  ENDIF
+  RETURN_VOID(fvFree)
+ENDFUN
+
+/**
+ * Goes down (descends) enough levels in the binary tree of (struct node)s.
+ * Reads numbers from input encoded as a Huffman tree represented by the
+ * (struct node)s.
+ * Called only from 2 places.
+ * Used <code>I</code> as both input and output, but the output is never used
+ * in the program. So I've put <code>I</code> to a argument.
+ * @param arg root is only for input
+ * @whichcode 3
+ */
+DEFUN_1(WORD,fvDescend,NODEN)
+  GLOBAL_REF(N)
+  FUNCODE
+  WHILE(NE(NULL,AREF(N,arg)))
+    IF(NZ(fvReadq(1)))
+      SET(arg,AREF(N,arg+1));
+    ELSE
+      SET(arg,AREF(N,arg));
+    ENDIF
+  ENDWHILE
+  RETURN(fvDescend,AREF(N,arg+2)) /* arg->value; */
+ENDFUN
+
+/**
+ * Allocates new (struct node)s. This is the Huffman tree
+ * builder. It reads the global array <code>Z</code>: the code lengths have
+ * been already stored there.
+ * Used <code>I</code> as output only, so I moved it to the return value.
+ * @param arg the number of entries (codes) of the Huffman tree to be built
+ * @return the root of the Huffman tree just built
+ * @whichcode 5
+ */
+DEFUN_1(NODEN,fvMktree,WORD)
+  GLOBAL_REF(B)
+  GLOBAL_REF(G)
+  GLOBAL_REF(N)
+  GLOBAL_REF(Z)
+  LOCAL_VAR(WORD,moo)
+  LOCAL_VAR(WORD,mq)
+  LOCAL_VAR(WORD,mo)
+  LOCAL_VAR(WORD,mf)
+  FUNCODE
+  /* NODEN anode; */
+#if SMALLEST_CODE
+  SET(moo,0); WHILE(LT(moo,17)) ASET(B,moo,0); INCR(moo); ENDWHILE
+#else
+  ASET(B,0,0); ASET(B,1,0); ASET(B,2,0); ASET(B,3,0); ASET(B,4,0); ASET(B,5,0); ASET(B,6,0); ASET(B,7,0); ASET(B,8,0);
+  ASET(B,9,0); ASET(B,10,0); ASET(B,11,0); ASET(B,12,0); ASET(B,13,0); ASET(B,14,0); ASET(B,15,0); ASET(B,16,0);
+#endif
+  SET(moo,0);
+  WHILE(LT(moo,arg)) INCR(AREF(B,AREF(Z,moo))); INCR(moo); ENDWHILE /* ! */
+  ASET(B,0,0);
+  ASET(G,0,0);
+#if SMALLEST_CODE
+  SET(moo,0);
+  WHILE(LT(moo,16))
+    ASET(G, moo+1,TWICE(AREF(G,moo)+AREF(B,moo)));
+    INCR(moo);
+  ENDWHILE
+#else
+  ASET(G, 1, TWICE(AREF(G, 0)+AREF(B, 0))); ASET(G, 2, TWICE(AREF(G, 1)+AREF(B, 1)));
+  ASET(G, 3, TWICE(AREF(G, 2)+AREF(B, 2))); ASET(G, 4, TWICE(AREF(G, 3)+AREF(B, 3)));
+  ASET(G, 5, TWICE(AREF(G, 4)+AREF(B, 4))); ASET(G, 6, TWICE(AREF(G, 5)+AREF(B, 5)));
+  ASET(G, 7, TWICE(AREF(G, 6)+AREF(B, 6))); ASET(G, 8, TWICE(AREF(G, 7)+AREF(B, 7)));
+  ASET(G, 9, TWICE(AREF(G, 8)+AREF(B, 8))); ASET(G,10, TWICE(AREF(G, 9)+AREF(B, 9)));
+  ASET(G,11, TWICE(AREF(G,10)+AREF(B,10))); ASET(G,12, TWICE(AREF(G,11)+AREF(B,11)));
+  ASET(G,13, TWICE(AREF(G,12)+AREF(B,12))); ASET(G,14, TWICE(AREF(G,13)+AREF(B,13)));
+  ASET(G,15, TWICE(AREF(G,14)+AREF(B,14))); ASET(G,16, TWICE(AREF(G,15)+AREF(B,15)));
+#endif
+  /* Dat: anode is the ->left pointer of the Sentinel node */
+  ASET(N,3,NULL); /* anode=NULL; */
+  SET(moo,0);
+  WHILE(LT(moo,arg))
+    IF(NZ(AREF(Z,moo)))
+      /* WORD o, f; */ /* struct node **f; */
+      SET(mq,AREF(G,AREF(Z,moo)));
+      INCR(AREF(G,AREF(Z,moo)));
+      SET(mf,3); /* mf=&anode; */
+      SET(mo,AREF(Z,moo));
+      WHILE(NZ(mo))
+        DECR(mo);
+        IF(EQ(AREF(N,mf),NULL))
+          ASET(N,mf,fvNalloc NOARGS);
+        ENDIF
+        /* if (0!=((mq>>o)&1)) f=&(*f)->right; else f=&(*f)->left; */
+        IF(TAND_P(mq,SHL(1,mo)))
+          SET(mf,AREF(N,mf)+1);
+        ELSE
+          SET(mf,AREF(N,mf)+0);
+        ENDIF
+      ENDWHILE
+      ASET(N,mf,fvNalloc NOARGS);
+      ASET(N,AREF(N,mf)+2,moo); /* (*f)->value=moo; */
+    ENDIF
+    INCR(moo);
+  ENDWHILE
+  RETURN(fvMktree,AREF(N,3))
+ENDFUN
+
+#if CFG_OLD_BUFFERING
+  /**
+   * Writes out a character if available.
+   * @whichcode 2
+   */
+  DEFUN_1_VOID(fvWrite,WORD)
+    GLOBAL_REF(T)
+    GLOBAL_REF(S)
+    GLOBAL_REF(C)
+    FUNCODE
+    /* fprintf(stderr, "write %d\n", arg&0xffff); */
+  #if 0
+      /* we don't need this because T and C are already in [0..32767) */
+      T&=32767;
+  #endif
+    ASET_S(T,arg);
+    SLIDE(T); /* T++; T&=32767; */
+    IF(EQ(T,C))
+      my_putchar(AREF_S(C)); 
+      SLIDE(C); /* C++; C&=32767; */
+    ENDIF
+    RETURN_VOID(fvWrite)
+  ENDFUN
+  static void fvFlush(void) {
+    WHILE(NE(C,T))
+      my_putchar(AREF_S(C));
+      SLIDE(C); /* C++; C&=32767; */ /* C%=32768; */
+    ENDWHILE
+  }
+  
+#else
+  /**
+   * Writes out a character if available.
+   * @whichcode 2
+   */
+  DEFUN_1_VOID(fvWrite,WORD)
+    GLOBAL_REF(T)
+    GLOBAL_REF(S)
+    GLOBAL_REF(C)
+    FUNCODE
+    /* fprintf(stderr, "write %d\n", arg&0xffff); */
+    /* my_putchar(arg); */
+    ASET_S(T,arg);
+    SLIDE(T); /* T++; T&=32767; */
+    if (T==0) {
+      fwrite(S,1,32768,stdout);
+    }
+    RETURN_VOID(fvWrite)
+  ENDFUN
+  static void fvFlush(void) {
+    if (T!=0) {
+      fwrite(S,1,T,stdout);
+      T=0;
+    }
+  }
+#endif
+
+#define FMT_ZIP_STORED   0 /* file is stored, not Deflated in ZIP file */
+#define FMT_ZLIB         120
+#define FMT_GZIP         31
+#define FMT_NONE         3
+#define FMT_STOP         4 /* stop processing and flush STDIN */
+#define FMT_ZIP_DEFLATED 8 
+
+/**
+ * @whichcode 0, 6
+ */
+DEFUN_0_VOID(fvMain)
+  GLOBAL_REF(J)
+  GLOBAL_REF(Y)
+  GLOBAL_REF(C)
+  GLOBAL_REF(T)
+  GLOBAL_REF(N)
+  GLOBAL_REF(D)
+  LOCAL_VAR(WORD,o)
+  LOCAL_VAR(WORD,q)
+  LOCAL_VAR(WORD,ty) /* type of input file */
+  /* vvv sub-locals */
+  LOCAL_VAR(WORD,oo)
+  LOCAL_VAR(WORD,ooo)
+  LOCAL_VAR(WORD,oooo)
+  LOCAL_VAR(WORD,f)
+  LOCAL_VAR(WORD,p)
+  LOCAL_VAR(WORD,x)
+  /**
+   * Root of the literal--length Huffman tree in <code>N</code>
+   * (see RFC 1951). Its length is at most 288 with values 0..287. Values
+   * 286 and 287 are invalid. A value in 0..255 means a literal byte, a
+   * value of 256 indicates end-of-block, and a
+   * value in 257..285 is a prefix (with 29 possible values) of a length
+   * in 3..258. See subsubsection 3.2.5 of RFC 1951.
+   */
+  LOCAL_VAR(NODEN,v)
+  /**
+   * Root of the distance Huffman tree in <code>N</code> (see RFC 1951).
+   * Its length is at most 32 with values 0..31. Values 30 and 31 are invalid.
+   * A value of 0..29 is a prefix (with 30 possible values) of a distance in
+   * 1..32768. See subsubsection 3.2.5 of RFC 1951.
+   */
+  LOCAL_VAR(NODEN,h)
+
+  FUNCODE
+  SET(ty,FMT_NONE);
+  SET(C,0); SET(T,0); /* make the round buffer empty */
+#ifdef CFG_MULTIPLE
+  WHILE(NE(ty,FMT_STOP)) /* outermost while loop */
+#endif
+  SET(oo,0); SET(ooo,0); /* avoid GCC warnings */
+  fxInit(); /* SET(J,0); SET(Y,0); */
+  SET(v,NULL); SET(h,NULL);
+  ASET(N,0,NULL); ASET(N,1,NULL); ASET(N,2,0); /* the NULL node is initially empty */
+  ASET(N,3,NULL); ASET(N,4,NULL); ASET(N,5,0); /* the Sentinel node is initially empty */
+  SET(D,6); /* first free node is 6. `0' is NULL, `3' is Sentinel */
+  SET(o,D);
+  WHILE (LT(o,NODESIZE))
+    ASET(N,o,o+3);  INCR(o); /* next free node is next node */
+    ASET(N,o,NULL); INCR(o); /* empty RIGHT */
+    ASET(N,o,0);    INCR(o); /* empty NVAL */
+  ENDWHILE
+#if 0
+/*        SET(f,fvRead(8)); ADD(f, SHL(fvRead(8),8)); */ /* length of filename */
+/*  printf("%#04x\n", fvRead(16)); */
+  o=fvRead(8);
+  o+=fvRead(8)*256;
+  printf("o=%#04x\n", o);
+  /* They are the same!! */
+  abort();
+#endif
+  
+#ifdef CFG_INPUT_RAW
+#else
+    SET(ty,fxRead8()); /* read first byte of the header */
+    /* fprintf(stderr,"ty=%d %d!\n",ty, TAND_P(512+ty,256)); */
+#if GETCHAR_NEGATIVE
+    IF(LT(ty,0))
+#else
+    IF(TAND_P(512+ty,256)) /* EOF */
+#endif
+      /* RETURN_FORCE_VOID; */
+      SET(ty,FMT_STOP);
+    ELSE_IF(EQ(ty,120)) /* ZLIB format */
+      IGNORE fxRead8(); /* skip second header byte: 0x01 or 0x5e or 0x9c or 0xda */
+      /* SET(ty,FMT_ZLIB); */
+    ELSE_IF(EQ(ty,80)) /* ZIP format */
+      IGNORE fxRead8(); /* skip second header byte: 0x48 */
+      SET(o,fxRead8());
+      SET(ty,FMT_NONE);
+      IF(EQ(o,3)) /* Local file header */
+        IGNORE fxRead8(); /* skip: 0x04 */
+        IGNORE fxRead16(); /* skip: version needed to extract file (0x0020) */
+        IGNORE fxRead16(); /* LOCFLG flags */
+        SET(ty,fxRead8()); /* lower half of compression method */
+        IGNORE fxRead8(); /* upper half of compression method */
+        IGNORE fxRead16(); IGNORE fxRead16(); /* file modification time in MS-DOS format */
+        IGNORE fxRead16(); IGNORE fxRead16(); /* some kind of CRC-32 */
+        SET(oo, fxRead16z()); /* lower compressed file size */
+        SET(ooo,fxRead16z()); /* higher compressed file size */
+        IGNORE fxRead16(); IGNORE fxRead16(); /* uncompressed file size */
+        SET(f,fxRead16z()); /* length of filename */      
+        SET(q,fxRead16z()); /* length of extra field */
+        #if 0        
+          WHILE(NZ(f)) IGNORE fxRead8(); DECR(f); ENDWHILE /* file name */
+        #else
+          WHILE(NZ(f)) fputc(fxRead8(),stderr); DECR(f); ENDWHILE /* file name */
+          fprintf(stderr,".\n");
+        #endif
+        WHILE(NZ(q)) IGNORE fxRead8(); DECR(q); ENDWHILE /* extra field */
+        /* now: ty is either of FMT_ZIP_STORED or FMT_ZIP_DEFLATED */
+      ELSE_IF(EQ(o,7)) /* Extended local header of previous file in ZIP */
+        SET(o,0); WHILE(LT(o,13)) IGNORE fxRead8(); INCR(o); ENDWHILE /* BUGFIX: was 15 */
+      ELSE_IF(EQ(o,5)) /* End of Central Directory Structure in ZIP */
+        /* fprintf(stderr,"EOCDS\n"); */
+        SET(o,0); WHILE(LT(o,17)) IGNORE fxRead8(); INCR(o); ENDWHILE
+        SET(o,fxRead16z()); /* CML: archive comment length */
+        WHILE (NZ(o)) IGNORE fxRead8(); DECR(o); ENDWHILE
+      ELSE_IF(EQ(o,1)) /* Central Directory Structure */
+        /* fprintf(stderr,"CDS\n"); */
+        SET(oo,0); WHILE(LT(oo,25)) IGNORE fxRead8(); INCR(oo); ENDWHILE
+        SET(f,fxRead16z()); /* LEN: length of file name */
+        SET(o,fxRead16z()); /* XLN: length of extra field */
+        SET(q,fxRead16z()); /* CML: length of file comment */
+        SET(oo,0); WHILE(LT(oo,12)) IGNORE fxRead8(); INCR(oo); ENDWHILE
+        WHILE(NZ(f)) IGNORE fxRead8(); DECR(f); ENDWHILE /* file name */
+        WHILE(NZ(o)) IGNORE fxRead8(); DECR(o); ENDWHILE /* extra field */
+        WHILE(NZ(q)) IGNORE fxRead8(); DECR(q); ENDWHILE /* file comment */
+      ENDIF /* IF ZIP structure sub-type */
+    ELSE_IF(EQ(ty,31)) /* gzip/RFC 1952 format */
+      /* fprintf(stderr,"gzip!\n"); */
+      /* SET(ty,FMT_GZIP); */
+      /* The most simple gzip header (10 bytes): 
+       * ID1   hex 0x1f == dec 31 == FMT_GZIP
+       * ID2   hex 0x8b
+       * CM    hex 0x08
+       * FLG   hex 0x00
+       * MTIME hex 0x00, 0x00, 0x00, 0x00 (1 Jan 1970, UNIX epoch)
+       * XFL   hex 0x00
+       * OS    hex 0xff
+       * After that comes the compressed data stream.
+       * After that comes the CRC32 and ISIZE (byte aligned? ?)
+       */
+      IGNORE fxRead16(); /* ignore ID2 and CM */
+      SET(o,fxRead8()); /* FLG */
+      IGNORE fxRead16(); IGNORE fxRead16(); /* ignore MTIME */
+      IGNORE fxRead16(); /* ignore XFL, OS */
+#ifndef CFG_INPUT_RFC /* CFG_INPUT_FILE */
+      IF(TAND_P(o,2)) /* GCONT: skip part number of continuation */
+        IGNORE fxRead16();
+      ENDIF
+#endif      
+      IF(TAND_P(o,4)) /* ignore FEXTRA */
+        SET(q,fxRead16());
+        WHILE(NZ(q)) IGNORE fxRead8(); DECR(q); ENDWHILE
+      ENDIF
+      IF(TAND_P(o,8))
+        WHILE(NZ(fxRead8()))
+          PASS;
+        ENDWHILE
+      ENDIF /* ignore FNAME */
+      IF(TAND_P(o,16))
+        WHILE(NZ(fxRead8()))
+          PASS;
+        ENDWHILE
+      ENDIF /* ignore FCOMMENT */
+#ifdef CFG_INPUT_RFC 
+      IF(TAND_P(o,2)) IGNORE fxRead16(); ENDIF /* ignore FHCRC */
+#else /* CFG_INPUT_FILE */
+      IF(TAND_P(o,32)) /* skip encryption header */
+        SET(f,0); WHILE(LT(f,12)) IGNORE fxRead8(); INCR(f); ENDWHILE
+      ENDIF
+#endif
+    ENDIF /* IF file format */
+    /* fprintf(stderr,"ty=%d\n", ty); */
+    IF(EQ(ty,FMT_ZIP_STORED))
+      /* fprintf(stderr,"oo=%d ooo=%d\n", oo, ooo); */
+      WHILE(NZ(oo)) fvWrite(fxRead8()); DECR(oo); ENDWHILE
+      WHILE(NZ(ooo))
+#if 0 /* In PostScript, this would mean an infinite loop.. */
+        my_putchar(fxRead8());
+        SET(oo,16384*4-1); /* !! op*, op/ */ /* avoid conflict with large numerical constants */
+        WHILE(NZ(oo)) my_putchar(fxRead8()); DECR(oo); ENDWHILE
+#else
+        fvWrite(fxRead8());
+        fvWrite(fxRead8());
+        SET(oo,32767);
+        WHILE(NZ(oo))
+          fvWrite(fxRead8());
+          fvWrite(fxRead8());
+          DECR(oo);
+        ENDWHILE
+#endif        
+        DECR(ooo);
+      ENDWHILE
+    ELSE_IF(EQ(ty,FMT_STOP))
+      PASS
+    ELSE_IF(NE(ty,FMT_NONE))
+#endif
+  SET(o,0);
+  WHILE(EQ(o,0))
+    SET(o,fvRead(1)); /* BFINAL: 1 iff this is the last data block */
+    SET(q,fvRead(2)); /* BTYPE: block type; 0=stored, 1=fixed Huff, 2=dyn Huff */
+    /* fprintf(stderr, "o=%d q=%d\n", o, q); */
+    assert(q==0 || q==1 || q==2);
+    IF(NZ(q))
+     /**
+      * Now: q==BTYPE, q==1 or q==2. (BTYPE==3 means error). Handles
+      * compressed data blocks, see subsubsection 3.2.5 of RFC 1951.
+      */
+#if 0 /* obsolete */
+      IF(TAND_1(q)) /* inline: fv(..., 8); */
+#else
+      IF(EQ(q,1))
+#endif      
+      /**
+       * Initializes the fixed Huffman codes for BTYPE==1.
+       */
+        /* WORD oo; */
+        SET(oo,288);
+        WHILE(NZ(oo))
+          DECR(oo);
+          /* AREF(Z,oo) = oo < 144 ? 8
+                : oo < 256 ? 9
+                : oo < 280 ? 7
+                : 8; */
+#if 0
+            if (144<=oo && oo<256) AREF(Z,oo)=9;
+            else if (256<=oo && oo<280) AREF(Z,oo)=7;
+            else AREF(Z,oo)=8;
+#else /* this doesn't require &&, <= etc */
+            IF(LT(oo,144))
+              ASET(Z,oo,8);
+            ELSE_IF(LT(oo,256))
+              ASET(Z,oo,9);
+            ELSE_IF(LT(oo,280))
+              ASET(Z,oo,7);
+            ELSE
+              ASET(Z,oo,8);
+            ENDIF
+#endif
+        ENDWHILE
+        SET(v,fvMktree(288));
+#if SMALLEST_CODE
+        SET(f,0); WHILE(LT(f,32)) ASET(Z,f,5); INCR(f); ENDWHILE
+#else
+        ASET(Z, 0,5); ASET(Z, 1,5); ASET(Z, 2,5); ASET(Z, 3,5); ASET(Z, 4,5); ASET(Z, 5,5); ASET(Z, 6,5); ASET(Z, 7,5);
+        ASET(Z, 8,5); ASET(Z, 9,5); ASET(Z,10,5); ASET(Z,11,5); ASET(Z,12,5); ASET(Z,13,5); ASET(Z,14,5); ASET(Z,15,5);
+        ASET(Z,16,5); ASET(Z,17,5); ASET(Z,18,5); ASET(Z,19,5); ASET(Z,20,5); ASET(Z,21,5); ASET(Z,22,5); ASET(Z,23,5);
+        ASET(Z,24,5); ASET(Z,25,5); ASET(Z,26,5); ASET(Z,27,5); ASET(Z,28,5); ASET(Z,29,5); ASET(Z,30,5); ASET(Z,31,5);
+#endif
+        SET(h,fvMktree(32));
+#if 0 /* obsolete */
+      ENDIF IF(TAND_P(q,2)) /* inline: fv(..., 9); */
+#else
+      ELSE
+#endif            
+      /**
+       * Reads dynamic Huffman codes for BTYPE==2.
+       *
+       * Maximum read: 5+5+4+3*19+7*289 == 2094 bits
+       */
+        /* WORD oo, ooo, oooo, f, p, x, v; */
+        SET(p, fvRead(5) + 257); /* HLIT: 257..286 (287--289 are unused) */
+        SET(x, fvRead(5) + 1); /* HDIST: 1..32 */
+        SET(v, fvRead(4) + 4); /* HCLEN: 4..19 */ /* small v */
+        SET(oo, 0);
+        WHILE(LT(oo,v))  ASET(Z,AREF(constW,oo), fvRead(3)); INCR(oo); ENDWHILE /* small v */
+        WHILE(LT(oo,19)) ASET(Z,AREF(constW,oo), 0); INCR(oo); ENDWHILE
+        SET(v,fvMktree(19));
+        SET(ooo,0);
+        SET(oo,0);
+        WHILE(LT(oo,p + x))
+          SET(oooo,fvDescend(v));
+          /* f = o == 16 ? ((o = ooo), 3 + fvRead(2))
+               : o == 17 ? ((o = 0), 3 + fvRead(3))
+               : o == 18 ? ((o = 0), 11 + fvRead(7))
+               : ((ooo = o), 1); */
+          IF(EQ(oooo,16))
+            SET(oooo,ooo); SET(f,3+fvRead(2));
+          ELSE_IF(EQ(oooo,17))
+            SET(oooo,0); SET(f,3+fvRead(3));
+          ELSE_IF(EQ(oooo,18))
+            SET(oooo,0); SET(f,11+fvRead(7));
+          ELSE
+            SET(ooo,oooo); SET(f,1);
+          ENDIF
+          SET(q,f);
+          WHILE(NZ(q)) ASET(Z,oo,oooo); INCR(oo); DECR(q); ENDWHILE
+        ENDWHILE
+        fvFree(v);
+        SET(v,fvMktree(p));
+        SET(oo,x);
+        /* vvv No need for array copy, just change/pass the pointer to Z... */
+        WHILE(NZ(oo)) DECR(oo); ASET(Z,oo,AREF(Z,oo + p)); ENDWHILE
+        SET(h,fvMktree(x));
+      ENDIF
+    /**
+     * Uncompresses the data block with the Huffman codes set up.
+     *
+     * Reads at most 33 bits per entry. Unfortunately the block can be of
+     * arbitrary length (terminated by an entry of 256).
+     */
+      /* inline: fv(..., 6); */
+      /* WORD oo, f; */
+      SET(oo,fvDescend(v));
+      /* ^^^ reads 0..15 bits, see subsubsection 3.2.7 of RFC 1951 */
+      WHILE(NE(oo, 256))
+        IF(LT(oo,257))
+          /* ^^^ BUG corrected */
+          fvWrite(oo);
+        ELSE
+          SUB(oo,257);
+          SET(f,AREF(constU,oo) + fvRead(AREF(constP,oo))); /* fvRead! 0..5 bits */
+          SET(oo,fvDescend(h));
+          SET(oo,AREF(constQ,oo) + fvRead(AREF(constL,oo))); /* fvRead! 0..13 bits */
+          /* oo = oo <= T ? T - oo : 32768 - oo + T; */
+          IF(LT(T,oo))
+            SET(oo,32768-oo+T);
+          ELSE
+            SET(oo,T-oo);
+          ENDIF
+          WHILE(NZ(f))
+            fvWrite(AREF_S(oo));
+            SLIDE(oo); /* oo++; oo&=32767; */ /* oo %= 32768; */
+            DECR(f);
+          ENDWHILE
+        ENDIF
+        SET(oo,fvDescend(v));
+        /* ^^^ reads 0..15 bits, see subsubsection 3.2.7 of RFC 1951 */
+      ENDWHILE
+      fvFree(v);
+      fvFree(h);
+    ELSE /* inline: fv(..., 7); */
+    /**
+     * Copies a block of input to output (mostly) verbatim. This is for
+     * BTYPE==0, non-compressed block, subsubsection 3.2.4 of RFC 1951.
+     * (We need non-compressed because
+     * some blocks cannot be compressed effectively, so gzip inserts them
+     * as is.)
+     * @whichcode 7
+     */
+      /* WORD oo; */
+      fxSkip();
+      /* ^^^ skip till we reach byte boundary. fvRead! 0..7 bits */
+      assert(Y==0);
+      SET(oo,fxRead16()); /* length of block */
+      fprintf(stderr, "BLK %d\n", oo&0xffff);
+      IGNORE fxRead16(); /* one's complement of length; ignored */
+      WHILE(NZ(oo)) fvWrite(fxRead8()); DECR(oo); ENDWHILE
+    ENDIF
+  ENDWHILE
+#ifdef CFG_INPUT_RAW
+#else
+  ENDIF /* IF */
+#endif
+#ifdef CFG_MULTIPLE
+  fxSkip();
+  /* ^^^ skip till we reach byte boundary. fvRead! 0..7 bits */
+#ifdef CFG_INPUT_RAW
+#else
+  fprintf(stderr,"done! %d\n", ty);
+  IF(EQ(ty,FMT_GZIP))
+    /* CRC32 and ISIZE remaining */
+    IGNORE fxRead16(); IGNORE fxRead16(); IGNORE fxRead16(); IGNORE fxRead16();
+  ELSE_IF(EQ(ty,FMT_ZLIB))
+    /* ADLER32 remaining */
+    IGNORE fxRead16(); IGNORE fxRead16();
+  ENDIF
+#endif
+  ENDWHILE /* outermost WHILE loop */
+#else
+  /* This is executed only if CFG_MULTIPLE is false */
+#if GETCHAR_NEGATIVE
+  WHILE(LT(-1,fxRead8())) ENDWHILE
+#else
+  /* vvv this works for both signed and unsigned, 16 bit and 32 bit */
+  WHILE(TNAND_P(512+fxRead8(),256)) ENDWHILE /* read whole input to avoid `Broken pipe' messages */
+  /* ^^^ corrected bug: [0..255] */
+#endif
+#endif
+  fvFlush(); /* Flush unwritten buffer. */
+  RETURN_VOID(fvMain)
+ENDFUN
+
+int main(int argc, char **argv);
+int main(int argc, char **argv) {
+  (void)argc; (void)argv;
+  fvMain();
+  return 0;
+}
+
+/* __END__ */

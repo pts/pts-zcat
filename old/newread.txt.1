@@ -1,0 +1,46 @@
+by pts@fazekas.hu at Mon Dec 24 22:19:04 CET 2001
+
+Operations:
+
+-- read a 8-bit byte at byte boundary
+-- read a 16-bit word at byte boundary, MSB first (ZIP)
+-- read a 16-bit word at byte boundary, LSB first (normal)
+-- skip to next byte boundary
+-- read 1 bit (for Huffman)
+-- read any amount of bits (0..13), LSB first
+
+
+
+
+
+---
+
+typedef short WORD;
+
+WORD fvRead(WORD arg) {
+  global BYTE current;
+  global BYTE next1;
+  global BYTE next2;
+  global INT pos;
+  WORD ret;
+  WORD opast=past;
+  /* Imp: verify unsigned shr! */
+  if (arg!=0) {
+    past+=arg;
+    if (past<=8) {
+      ret=U_SHR(current,opast);
+      if (past==8) { pos++; past=0; }
+    } else if (past<=16) {
+      ret=U_SHR(current,opast)+U_SHL(next1,8-opast);
+      if (past==16) { pos+=2; past=0; } else { pos++; past-=8; }
+    } else {
+      assert(past<=7+13);
+      ret=U_SHR(current,opast)+U_SHL(next1,8-opast)+U_SHL(next2,16-opast);
+      pos+=2; past-=16;
+    }
+    ret&=((1<<arg)-1);
+  } else ret=0;
+  return ret;
+}
+
+__END__

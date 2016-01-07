@@ -1,0 +1,49 @@
+#!/usr/local/bin/perl -w
+# ps_peep.pl -- a simplistic PostScript-subset peephole optimizer
+# Reads code (.psr or .psr file) from STDIN, writes to STDOUT
+use integer;
+use strict;
+
+$_=join"",<>; # read STDIN
+s/%.*//g; # remove comments
+s/\s+/ /g; # remove extra whitespace
+s/ *([{}]) */ $1 /g; # put spaces around curly brackets
+# $_=" $_ "; # don't need this because code is always inside curly brackets
+
+s/ ([-?\d]+) (\w+) \{ ([-?\d]+) \}  \{ ([-?\d]+) \} ifelse / XXX:$1:$2:$3:$4 /g;
+
+# ?? `true 1 def false 1 def'
+#    `0 ne { 42 } { 137 } ifelse' ->
+#    `42 0 ne load 95 mul add' ??
+# ?? `true /pop load def false /add load def
+#    `42 exch 137 exch 0 ne load exec' ->
+#    `0 ne 42 exch { -95 add } if'
+# ?? `'
+#    `0 ne { 42 } { 137 } ifelse' ->
+#    `0 ne 42 exch { -95 add } if'
+# ?? `true /cvi load def false /neg load def
+#    `42 exch 138 exch 0 ne load exec' ->
+#    `0 ne load 95 exch exec 42 add'
+# ?? `true /cvi load def false /neg load def
+#    `42 exch 138 exch 0 ne load exec'
+#    `0 ne {load 95 exch exec 42 add'
+# 
+# a<5
+#
+# a 5
+#
+
+# 100 100 -> 100 dup
+# neg sub -> add
+# neg add -> sub
+# exch add -> add
+
+# s/ (-?\d+) (gt|ge|lt|le) / XXX /g;
+s/ neg sub / XXX /g;
+s/ neg add / XXX /g;
+
+# s/ *([{}]) */$1/g; # remove extra spaces around curly brackets
+
+y/}/\n/;
+print;
+

@@ -1,0 +1,909 @@
+Flate FAQ
+~~~~~~~~~
+Everyhing you wanted to know about the Flate compression method and software
+that implements it.
+
+compiled by Szabó Péter <pts@fazekas.hu> at Sat Jul 21 23:22:34 CEST 2001
+
+1. What is Flate?
+"""""""""""""""""
+Flate is a generic data compression method that compresses a sequence of
+arbitrary binary 8-bit bytes to a sequence of 8-bit bytes. Compression is
+lossless, the original data can be retrieved from the compressed data
+without a single bit of data loss.
+
+Uncompression is unambiguous: the compressed data fully determines the
+output of the uncompressor.
+
+Compression is ambiguous: there are multiple ways and multiple algorithm
+implementations to compress -- compressors may operate any way they wish,
+but their output must conform to the output file format (see FAQ answer 4).
+
+1a. What is Deflate?
+""""""""""""""""""""
+Deflate is the `compression' (or encoding, packing) direction of Flate.
+
+Do not intermix Deflate with `DEFLATE', a compressed data format (see FAQ
+answer 4.)
+
+The `de-' prefix of Deflate is rather confusing. Despite of the `de-'
+prefix, Deflate refers to compression, not uncompression. To prevent further
+confusion, the word `decompression' is avoided in this FAQ, and the
+term `uncompression' is used instead.
+
+There is no standard way to do Deflate compression. Existing utilities use
+their own, slightly unique algorithm.
+
+1b. What is Inflate?
+""""""""""""""""""""
+Inflate is the `uncompression' (or decoding, unpacking) direction of Flate.
+
+RFC 1951 describes the inner part of the Flate data comprression format, and
+gives detailed emplanation about writing an Inflate uncompressor.
+
+1c. Is Flate the same as LZW compression?
+"""""""""""""""""""""""""""""""""""""""""
+No, they are completely different, and they are unrelated to each other.
+
+1d. Is Flate the same as ZIP compression?
+"""""""""""""""""""""""""""""""""""""""""
+ZIP is a file format, Flate is a compression method. They are not the same,
+but they are closely related. See FAQ answer 3 and 4.
+
+However, one should know that Flate is sometimes errorneously referred as
+ZIP compression, for example in the UNIX utilities convert(1) and tiffcp(1).
+
+1e. Is Flate the same as RAR compression?
+"""""""""""""""""""""""""""""""""""""""""
+No, they are completely different, and they are unrelated to each other.
+
+1f. Is Flate the same as LZ77 compression?
+""""""""""""""""""""""""""""""""""""""""""
+No, but they are fundamentally similar. See FAQ answer 2.
+
+1g. Is Flate the same as LZSS compression?
+""""""""""""""""""""""""""""""""""""""""""
+No, but they are fundamentally similar. See FAQ answer 2.
+
+1h. What are the most important characteristics of Flate?
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+-- lossless
+-- accepts any binary (8-bit) input
+-- produces binary output
+-- free to use, isn't covered by licenses and patents
+-- the full exact specification (RFC 1951, RFC 1952, RFC 1950) is available
+   for free -- unfortunately not on Debian systems (missing from the
+   doc-rfc package)
+-- supported by many programs and utilities (see FAQ answer 3)
+-- requires only 10K of RAM for uncompression
+-- uncompression code is smaller than
+   40K in C source, PC assembly, SPARC assembly and Java bytecode
+-- uncompression is fast (proportional to the input size)
+-- memory and CPU time requirement of the compression depends on several
+   factors, and can be adjusted to meet specific needs
+-- available since 1993
+-- many free source compressors and uncompressors exist (since 1993)
+-- compares well to other methods (see FAQ answer 5)
+
+2. How does Deflate work?
+"""""""""""""""""""""""""
+The deflation algorithm used by zip and gzip is a variation of LZ77
+(Lempel-Ziv 1977,
+[LZ77] Ziv J., Lempel A., "A Universal Algorithm for Sequential Data
+Compression", IEEE Transactions on Information Theory", Vol. 23, No. 3,
+pp. 337-343.)
+It finds duplicated strings in
+the input data.  The second occurrence of a string is replaced by a
+pointer to the previous string, in the form of a pair (distance,
+length).  Distances are limited to 32K bytes, and lengths are limited
+to 258 bytes. When a string does not occur anywhere in the previous
+32K bytes, it is emitted as a sequence of literal bytes.  (In this
+description, 'string' must be taken as an arbitrary sequence of bytes,
+and is not restricted to printable characters.)
+
+Literals or match lengths are compressed with one Huffman tree, and
+match distances are compressed with another tree. The trees are stored
+in a compact form at the start of each block. The blocks can have any
+size (except that the compressed data for one block must fit in
+available memory). A block is terminated when zip determines that it
+would be useful to start another block with fresh trees. (This is
+somewhat similar to the UNIX `compress' utility.)
+
+It is an interesting question how to find duplicated substrings efficiently.
+The most common Deflate implementations (such as gzip and Info-Zip) find
+duplicated strings using a hash table. All input strings of
+length 3 are inserted in the hash table. A hash index is computed for
+the next 3 bytes. If the hash chain for this index is not empty, all
+strings in the chain are compared with the current input string, and
+the longest match is selected. For more information, consult the
+documentation of the implementations.
+
+For the most verbose technical details, see RFC 1951.
+
+3. What compressors and other programs support Flate compression?
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+-- newer versions of PkZip (since around 1997) compresses data exclusively
+   with the Deflate method. Its companion, PkUnzip can uncompress the ZIP
+   files created by PkZip.
+
+-- INFO-Zip (the free UNIX `zip' and `unzip' utilities), WinZIP, PkZip and
+   JAR (Java Archiver) use the same file format, ZIP, which uses the Deflate
+   method almost exclusively.
+
+-- The free GNU gzip package (featuring the utilities `gzip', `gunzip' and
+   `zcat') compresses using the Flate method, but is able to exctract some
+   other, historical file formats for compatibility reasons.
+
+-- The free PNG bitmap graphics file format supports Flate compression
+   exclusively. All PNG handling programs, including the UNIX libpng library
+   can load and save PNG files with Flate compression.
+
+-- The TIFF bitmap graphics file format support Flate compression among
+   others. Note that many older utilities cannot handle TIFF files with
+   Flate compression, so a Flate-compressed TIFF is not portable. The UNIX
+   libtiff library can load and save TIFF files with Flate compression, and
+   since most Linux graphics utilities (including Gimp and ImageMagick's
+   `convert') use libtiff, so do they.
+
+-- The free library zlib is devoted to Flate compression and uncompression.
+   Many utilities and libraries (such as libpng and libtiff) use zlib for
+   their Flate support. Note that the UNIX utilities `gzip', `gunzip',
+   `zcat', `zip' and `unzip' don't use zlib: the compression and
+   decompression routines are integrated to them.
+
+-- zlib interfaces are available in many programming languages, including C,
+   C++, Perl, PHP, Python, Ruby and Pike.
+
+-- The bootable Linux kernel (vmlinuz, zImage, bzImage) is compressed using
+   Flate compression to reduce disk space.
+
+-- Java has its own Flate compression and uncompression implementation (from
+   JDK 1.1, by default!), similar to, but not relying on zlib.
+
+-- The PostScript language (officially from LanguageLevel 3, but also many
+   earlier implementations, such as GNU Ghostscript 5.50)
+   supports Flate compression and uncompression using the /FlateEncode and
+   the /FlateDecode filters.
+
+-- The PDF page page description format (from PDF 1.2, Acrobat software 3.0)
+   supports Flate uncompression by the means of the /FlateDecode filter.
+
+3b. What compressors and other programs do _not_ support Flate compression?
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+-- the UNIX `compress' utility (which uses LZW in fact)
+
+-- earlier versions of PkZip, TIFF, PostScript and PDF
+
+-- the compressors RAR, ARJ, LHA, PkArc and Zoo
+
+4. What file formats are associated with Flate?
+"""""""""""""""""""""""""""""""""""""""""""""""
+-- the RFC 1952 `GZIP' file format (version 4.3, May 1996), as described
+   in RFC 1952. Note that
+   this is very similar, but not the same as the file format used by
+   the GNU gzip utility. To avoid ambiguity, the RFC 1952 file format will
+   be referred as `RFC 1952' in this FAQ. See FAQ answer 4a for more
+   detail. The difference between the two formats is negligable, so
+   practically
+   the `RFC 1952' format files can be manupulated with the `gzip' and
+   `gunzip' utilities. Currently nobody uses the `RFC 1952' file format --
+   the `gzip' file format is used instead.
+
+-- the file format used by GNU gzip (version 1.2.4, 18 Aug 1993). This will
+   be referred the `gzip' format in this FAQ. See FAQ answer 4b for more
+   detail. `gzip' format files can be manupulated with the `gzip' and
+   `gunzip' utilities. PHP gzdeflate() and PHP gzinflate() is compatible
+   with this.
+
+-- The new ZIP file format (>= around 1997, since PkZip 1.93), which is offers
+   much more than just a simple
+   Flate compression. Note that the JAR and ZIP file formats are the same.
+   See the documentation of Info-ZIP for more details about the ZIP format.
+
+-- the `ZLIB' file format (version 3.3, May 1996), as described in RFC
+   1950. (The term is somewhat confusing because the library zlib can be
+   instructed to load and save files in several formats, such as RFC 1952,
+   gzip, ZIP and ZLIB.) PostScript and PDF support the `ZLIB' format
+   (and _not_ the gzip format) with their /FlateDecode (uncompression) and
+   /FlateEncode (compression) filters. PHP gzcompress() and gzuncompress()
+   is compatible with this.
+
+-- the `DEFLATE' compressed data format (version 1.3, May 1996), as
+   described in RFC 1951. This is not a file format, only a data format --
+   auxilary and checksum information etc. is missing from it.
+   Data compressed this way is encapsuled in RFC 1952, gzip, ZIP, ZLIB and
+   other file formats. So this data format is essentially _the_ Flate
+   (un)compression format.
+
+4b. How do the gzip/RFC 1952 file formats look like?
+""""""""""""""""""""""""""""""""""""""""""""""""""""
+(answer based on gzip's algorithm.doc by Jean-loup Gailly <jloup@chorus.fr>)
+
+The information presented here (along with RFC 1951 and RFC 1952) is enough
+to write a gzip-compliant decompressor.
+
+In the following explanation...
+
+-- For the gzip file format, please assume that FHCRC is 0.
+
+-- For the RFC 1952 file format, please assume that GCONT and GENCR are 0, and
+   the FEXTRA is undocumented (so it is 0). For more details, see RFC 1952.
+
+MSB first byte order is used (see FAQ answer 8).
+
+gzip uses a simple structure. Numbers are in little
+endian (???) format, and bit 0 is the least significant bit.
+A gzip file is a sequence of compressed members. Each member has the
+following structure:
+
+2 bytes  magic header  0x1f, 0x8b (\037 \213)  
+1 byte   8. compression method, indicates Flate format.
+1 byte   flags (FLG)
+            bit 0 set: FTEXT: file probably ascii text
+            bit 1 set: FHCRC (RFC 1952): 16-bit header CRC (HCRC) is present
+                       GCONT (gzip): continuation of multi-part gzip file
+            bit 2 set: FEXTRA: extra field present
+            bit 3 set: FNAME: original file name present
+            bit 4 set: FCOMMENT: file comment present
+            bit 5 set: (RFC 1952): reserved, zero
+                       GENCR (gzip): file is encrypted
+            bit 6:     reserved, zero
+            bit 7:     reserved, zero
+4 bytes  file modification time in UNIX timestamp format, measured in
+         seconds; zero is 1 Jan 1970 00:00:00 UTC.
+1 byte   extra flags (depend on compression method), for Flate:
+         XFL = 0 - compressor used normal compression
+         XFL = 2 - compressor used maximum compression, slowest algorithm
+         XFL = 4 - compressor used fastest algorithm
+1 byte   operating system/file system on which compression took place:
+           0 - FAT filesystem (MS-DOS, OS/2, NT/Win32)
+           1 - Amiga
+           2 - VMS (or OpenVMS)
+           3 - Unix
+           4 - VM/CMS
+           5 - Atari TOS
+           6 - HPFS filesystem (OS/2, NT)
+           7 - Macintosh
+           8 - Z-System
+           9 - CP/M
+          10 - TOPS-20
+          11 - NTFS filesystem (NT)
+          12 - QDOS
+          13 - Acorn RISCOS
+         255 - unknown
+2? bytes optional part number, only if GCONT=1
+2? bytes optional extra field length, only if FEXTRA=1
+? bytes  optional extra field, only if FEXTRA=1
+? bytes  optional original file name, zero terminated, only if FNAME=1
+? bytes  optional file comment, zero terminated, only if FCOMMENT=1
+2? bytes optional header CRC, only if FHCRC=1
+12? bytes optional encryption header, only if GENCR=1
+--- end of header
+? bytes  compressed data, in Flate format, see RFC 1951
+--- beginning of trailer
+4 bytes  mandatory CRC32, see RFC 1952
+4 bytes  uncompressed input file size, modulo 2^32
+
+The shortest compliant gzip/RFC 1952 header (10 bytes):
+
+	0x1f 0x8b 0x08 0x00 0x00 0x00 0x00 0x00 0x00 0xff
+
+The format was designed to allow single pass compression without any
+backwards seek, and without a priori knowledge of the uncompressed
+input size or the available size on the output media. If input does
+not come from a regular disk file, the file modification time is set
+to the time at which compression started.
+
+The time stamp is useful mainly when one gzip file is transferred over
+a network. In this case it would not help to keep ownership
+attributes. In the local case, the ownership attributes are preserved
+by gzip when compressing/uncompressing the file. A time stamp of zero
+is ignored.
+
+Bit 0 in the flags is only an optional indication, which can be set by
+a small lookahead in the input data. In case of doubt, the flag is
+cleared indicating binary data. For systems which have different
+file formats for ascii text and binary data, the uncompressor can
+use the flag to choose the appropriate format.
+
+The extra field, if present, must consist of one or more subfields,
+each with the following format:
+
+  subfield id   : 2 bytes
+  subfield size : 2 bytes  (little-endian format)
+  subfield data
+
+The subfield id can consist of two letters with some mnemonic value.
+Please send any such id to jloup@chorus.fr. Ids with a zero second
+byte are reserved for future use. The following ids are defined:
+
+  Ap (0x41, 0x70) : Apollo file type information
+
+The subfield size is the size of the subfield data and does not
+include the id and the size itself. The field 'extra field length' is
+the total size of the extra field, including subfield ids and sizes.
+
+It must be possible to detect the end of the compressed data with any
+compression format, regardless of the actual size of the compressed
+data. If the compressed data cannot fit in one file (in particular for
+diskettes), each part starts with a header as described above, but
+only the last part has the crc32 and uncompressed size. A uncompressor
+may prompt for additional data for multipart compressed files. It is
+desirable but not mandatory that multiple parts be extractable
+independently so that partial data can be recovered if one of the
+parts is damaged. This is possible only if no compression state is
+kept from one part to the other. The compression-type dependent flags
+can indicate this.
+
+If the file being compressed is on a file system with case insensitive
+names, the original name field must be forced to lower case. There is
+no original file name if the data was compressed from standard input.
+
+Compression is always performed, even if the compressed file is
+slightly larger than the original. The worst case expansion is
+a few bytes for the gzip file header, plus 5 bytes every 32K block,
+or an expansion ratio of 0.015% for large files. Note that the actual
+number of used disk blocks almost never increases.
+
+The encryption is that of zip 1.9. For the encryption check, the
+last byte of the decoded encryption header must be zero. The time
+stamp of an encrypted file might be set to zero to avoid giving a clue
+about the construction of the random header.
+
+4c. How does the ZLIB file format look like?
+""""""""""""""""""""""""""""""""""""""""""""
+The information presented here (along with RFC 1951 and RFC 1950) is enough
+to write a ZLIB-compliant decompressor.
+
+See RFC 1950 for more detail.
+
+All the multi-byte data used in the ZLIB format is stored MSB first.
+
+Only for the Flate compression, the file starts with a 16-bit word:
+
+	0x7801 fastest compression
+	0x785e fast compression
+	0x789c default compression
+	0x78da maximum compression
+
+The compression method used is only auxilary information, doesn't affect
+uncompression.
+
+After that comes the data in Flate-compressed format (see RFC 1951).
+
+After that comes the ADLER32 checksum of the _uncompressed_ file, in 4
+bytes (see RFC 1950 for more detail). See FAQ anwer 10.
+
+4d. How to convert between Flate file formats?
+""""""""""""""""""""""""""""""""""""""""""""""
+Only gzip, RFC 1952, DEFLATE (RFC 1951) and ZLIB (RFC 1950) will be
+discussed.
+
+First, remove the header:
+
+-- remove 10 or more bytes for gzip and RFC 1952, see FAQ answer 4b
+-- don't remove anything for DEFLATE (RFC 1951)
+-- remove 2 bytes for ZLIB (RFC 1950)
+
+Then, remove the trailer from the end:
+
+-- remove 8 bytes for gzip and RFC 1952, see FAQ answer 4b
+-- don't remove anything for DEFLATE (RFC 1951)
+-- remove 4 bytes for ZLIB (RFC 1950)
+
+Now, the bytes remaining constitute a compressed tata in DEFLATE format. If
+that was the target file format, stop. Otherwise, uncompress the data in
+memory, and calculate the CRC:
+
+-- for gzip and RFC 1952, calculate CRC32, as described in RFC 1952
+-- for ZLIB, calculate ADLER32, as defined in RFC 1950
+
+If uncompression would take much time, you may omit it, fake something
+for the CRC and ignore CRC errors reported by uncompressors.
+
+Add the appropriate headers:
+
+-- at least 10 bytes for gzip and RFC 1952, see FAQ answer 4b
+-- 2 bytes for ZLIB, see FAQ answer 4c
+
+Add the appropriate trailers:
+
+-- 8 bytes for gzip and RFC 1952, see FAQ answer 4b
+-- 4 bytes for ZLIB, see FAQ answer 4c
+
+4c. How does a ZIP file look like?
+""""""""""""""""""""""""""""""""""
+(answer based on gzip's unzip.c and 
+
+	ftp://ftp.elf.stuba.sk/pub/pc/text/ffmts002.zip
+)
+
+The information presented here (along with RFC 1951) is enough
+to write a ZIP-compliant decompressor.
+
+The byte order for the ZIP file is LSB first (!).
+
+The term `local file' means a sub-file packed into the big ZIP file.
+
+The structure of the ZIP file:
+
+-- for each local file: (local file header),
+   (local file contents, compressed), (extended local header)
+-- for each local file: (central directory structure)
+-- end of central directory structure
+
+The directory information is stored at the end of the archive, each local
+file in the archive begins with the following header; This header can be used
+to identify a ZIP file as such :
+
+--- Local file header
+OFFSET              Count TYPE   Description
+0000h                   4 char   ID='PK',03,04
+0004h                   1 word   Version needed to extract the file (0x0020: 2.0)
+0006h                   1 word   LOCFLG: General purpose bitfield (bit mapped)
+                                      0 - file is encrypted
+                                      1 - 8K/4K sliding dictionary used
+                                      2 - 3/2 Shannon-Fano trees were used
+                                      3 - extended local header present
+                                      4 - unused (??)
+                                   5-15 - used internally by ZIP
+                                 Note:  Bits 1 and 2 are undefined if the
+                                        compression method is other than
+                                        type 6 (Imploding).
+0008h                   1 word   Compression method
+                                 PkZip compression types:
+                                  0 - Stored / No compression
+                                  1 - Shrunk / LZW, 8K buffer, 9-13 bits with partial clearing
+                                  2 - Reduced-1 / Probalistic compression, lower 7 bits
+                                  3 - Reduced-2 / Probalistic compression, lower 6 bits
+                                  4 - Reduced-3 / Probalistic compression, lower 5 bits
+                                  5 - Reduced-4 / Probalistic compression, lower 4 bits
+                                  6 - Imploded / 2/3 Shanno-Fano trees, 4K/8K sliding dictionary
+                                  7 - Tokenized
+                                  8 - Deflated (as of RFC 1951)
+                                  9 - ENH Deflated (_not_ RFC 1951)
+                                  10 - DCL Imploded
+                                  >=11 - reserverd
+000Ah                   1 dword  Original DOS file date/time
+                                 Format of the MS-DOS time stamp (32-bit):
+                                 The MS-DOS time stamp is limited to an even count of seconds, since the
+                                 count for seconds is only 5 bits wide.
+                                  31 30 29 28 27 26 25 24 23 22 21 20 19 18 17 16M
+                                 |<---- year-1980 --->|<- month ->|<--- day ---->|
+                                  15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0M
+                                 |<--- hour --->|<---- minute --->|<- second/2 ->|
+000Eh                   1 dword  32-bit CRC of uncompressed file (inverse??), seems to be
+                                 same as in RFC 1951.
+0012h                   1 dword  compressed file size, in bytes
+0016h                   1 dword  uncompressed file size, in bytes
+001Ah                   1 word   Length of filename ="LEN"
+001Ch                   1 word   Length of extra field ="XLN" 
+001Eh               "LEN" char   path/filename
+001Eh+"LEN"         "XLN" char   extra field (see GZIP, FAQ answer 4b.)
+
+--- Extended local header
+This is present only if the appropriate bit of LOCFLG is 1. If present, then
+the same data fields from the Local file header must be ignored, and these
+must be used instead (marked as `instead').
+0000h                   4 char   ID signature: 0x50 0x4b 0x07 0x08
+0004h                   1 dword  CRC-32 value of uncompressed file -- instead
+0008h                   1 dword  compressed file size, in bytes
+000Ch                   1 dword  uncompressed file size, in bytes -- instead
+
+After all the files, there comes the central directory structure.
+
+--- Central directory structure (CDS)
+The CDS is at the end of the archive and contains additional information
+about the files stored within the archive.
+OFFSET              Count TYPE   Description
+0000h                   4 char   ID='PK',01,02
+0004h                   1 byte   Version made by
+0005h                   1 byte   Host OS (see table 0011)
+                                 PkZip Host OS table:
+                                  0 - MS-DOS and OS/2 (FAT)
+                                  1 - Amiga
+                                  2 - VMS
+                                  3 - Unix
+                                  4 - VM/CMS
+                                  5 - Atari ST
+                                  6 - OS/2 1.2 extended file sys
+                                  7 - Macintosh
+                                  8-255 - unused
+0006h                   1 byte   Minimum version needed to extract
+0007h                   1 byte   Target OS
+                                 see above "Host OS"
+0008h                   1 word   General purpose bit flag
+                                 see above "General purpose bit flag"
+000Ah                   1 word   Compression method
+                                 see above "Compression method"
+000Ch                   1 dword  DOS date / time of file (see above)
+0010h                   1 dword  32-bit CRC of file
+0014h                   1 dword  Compressed size of file
+0018h                   1 dword  Uncompressed size of file
+001Ch                   1 word   Length of filename ="LEN"
+001Eh                   1 word   Length of extra field ="XLN"
+0020h                   1 word   Length of file comment ="CMT"
+0022h                   1 word   Disk number ??
+0024h                   1 word   Internal file attributes (bit mapped)
+                                    0 - file is apparently an ASCII/binary file
+                                 1-15 - unused
+0026h                   1 dword  External file attributes (OS dependent)
+002Ah                   1 dword  Relative offset of local header from the
+                                 start of the first disk this file appears on
+002Eh               "LEN" char   Filename / path; should not contain a drive
+                                 or device letter, all slashes should be forward
+                                 slashes '/'.
+002Eh+"LEN"         "XLN" char   Extra field
+002Eh+"LEN"+"XLN"   "CMT" char   File comment
+
+--- End of central directory structure (EOCDS)
+The End of Central Directory Structure header has following format :
+OFFSET              Count TYPE   Description
+0000h                   4 char   ID='PK',05,06
+0004h                   1 word   Number of this disk
+0006h                   1 word   Number of disk with start of central directory
+0008h                   1 word   Total number of file/path entries on this disk
+000Ah                   1 word   Total number of entries in central dir
+000Ch                   1 dword  Size of central directory
+0010h                   1 dword  Offset of start of central directory relative
+                                 to starting disk number
+0014h                   1 word   Archive comment length ="CML"
+0016h               "CML" char   Zip file comment
+
+REFERENCE:technote.app
+
+Example:
+
+A sample ZIP local file header, in little endian (LSB first) byte order:
+
+"PK\x03\x04" local file header
+"\x0a\x00" version needed to extract
+"\x00\x00" LOCFLG, no flags
+"\x00\x00" compression method: stored without compression
+"\xa2\xa2\x9c+" original DOS file date/time ("\x00\x00\x21\x00" is early 1981)
+"\x00\x00\x00\x00" 32-bit CRC, as in RFC 1951
+"\x00\x00\x00\x00" compressed file size
+"\x00\x00\x00\x00" uncompressed file size
+"\x05\x00" length of file name
+"\x15\x00" length of extra field
+"empty" file name (with path)
+  "UT" in extra field: subfile#1 ID
+  "\x09\x00" subfile#1 size
+  "\x03\x20\xc6,<0\xc6,<" subfile#1 data
+  "Ux" subfile#2 ID
+  "\x04\x00" subfile#2 size
+  "\xfb\x01e\x00" in extra field: subfile#2 data
+"": data file contents: empty file
+
+A minimalistic ZIP local file header, in little endian (LSB first) byte order:
+
+"PK\x03\x04". #local file header
+"\x0a\x00". #version needed to extract
+"\x00\x00". #LOCFLG, no flags
+"\x00\x00". #compression method: stored without compression
+"\x00\x00\x21\x00". #original DOS file date/time
+"\x00\x00\x00\x00". #32-bit CRC, as in RFC 1951
+"\x00\x00\x00\x00". #compressed file size
+"\x00\x00\x00\x00". #uncompressed file size
+"\x01\x00". #length of file name
+"\x00\x00". #length of extra field
+"!". #file name (with path)
+"". #extra field
+"" #data file contents: empty file
+
+Example of Central directory structure:
+
+"PK\x01\x02" Central directory structure ID
+"\x16" version made by
+"\x03" host OS
+"\x0a" minimum version needed to extract
+"\x00" target OS   
+"\x00\x00" bit flag
+"\x00\x00" compression method
+"\xa2\xa2\x9c+" DOS date/time
+"\x00\x00\x00\x00" 32-bit CRC
+"\x00\x00\x00\x00" compressed size  
+"\x00\x00\x00\x00" uncompressed size
+"\x05\x00" length of file name  
+"\x0d\x00" length of extra field 
+"\x00\x00" length of file comment
+"\x00\x00" disk number
+"\x00\x00" internal file attributes
+"\x00\x00\xa4\x81" external file attributes (OS dependent)
+"\x00\x00\x00\x00" offset of local file header from beg of disk (ZIP file)
+"empty" filename/path
+"UT\x05\x00\x03\x20\xc6,<Ux\x00\x00" extra field
+"" file coment
+
+5. How does Flate compare to similar compression methods?
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+Respects of comparison:
+
+-- compressed file size
+-- compression time requirement
+-- compression memory requirement
+-- uncompression time requirement
+-- uncompression memory requirement
+
+The most important respect of comparison is compressed file size. A rough,
+emprical comparison follows, using human language text, program source code,
+compiled program binaries and images with few colors for input.
+
+Flate is much better than:
+
+-- most run-length encoding schemes
+-- CCITT Fax encoding
+
+Flate is better than:
+
+-- LZW (UNIX `compress')
+-- LHA (LZH)
+
+Flate is slightly worse than:
+
+-- RAR
+-- ACE
+-- bzip2
+-- ARJ
+-- rkive
+
+As a worst case (for random data), Deflate expands its output with a factor
+of 1.003. (The worst case for LZW is 1.125, which can grow to 1.5 for some
+implementations.)
+
+6. What else should I read?
+"""""""""""""""""""""""""""
+-- RFC 1950: ZLIB Compressed Data Format Specification version 3.3
+
+-- RFC 1951: DEFLATE Compressed Data Format Specification version 1.3
+
+-- RFC 1952: GZIP file format specification version 4.3
+
+RFCs are: Internet Engineering Task Force (IETF) Requests for Comments
+(RFCs). They are available from:
+
+	http://www.rfc-editor.org
+	ftp://ftp.germany.eu.net/pub/documents/rfc
+	ftp://venera.isi.edu/in-notes/rfc-editor
+	http://www.isi.edu/cgi-bin/rfc-ed/http://www.isi.edu/cgi-bin/rfc-ed/
+
+Note that there exists a Debian package doc-rfc, but it doesn't contain the
+RFCs mentioned above.
+
+Details on obtaining RFCs via FTP or EMAIL may be obtained by sending           
+an EMAIL message to:  rfc-info@ISI.EDU                                          
+with the message body help: ways_to_get_rfcs.                                   
+                                                                                
+For example:                                                                    
+                                                                                
+        To: rfc-info@ISI.EDU                                                    
+        Subject: getting rfcs                                                   
+                                                                                
+        help: ways_to_get_rfcs                                                  
+
+-- An description of several file formats, from 1996:
+
+	ftp://ftp.elf.stuba.sk/pub/pc/text/ffmts002.zip
+
+-- [LZ77] Ziv J., Lempel A., "A Universal Algorithm for Sequential Data   
+Compression", IEEE Transactions on Information Theory", Vol. 23, No. 3,
+pp. 337-343.
+
+-- APPNOTE.TXT documentation file in PKZIP 1.93a. It is available by      
+ftp in ftp.cso.uiuc.edu:/pc/exec-pc/pkz193a.exe [128.174.5.59]
+Use "unzip pkz193a.exe APPNOTE.TXT" to extract (note: unzip, not gunzip).
+Also look for technote.app. Note that newer versions of PkZip distributins
+(such as 2.50) lack this file.
+
+7a. Why cannot gunzip uncompress the output of PostScript /FlateEncode?
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+These formats are similar, but not identical. See FAQ answer 4.
+
+7b. Why cannot PostScript /FlateDeocde uncompress the output of gzip?
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+These formats are similar, but not identical. See FAQ answer 4.
+
+7c. I want to compress entire files in PHP. What functions should I use?
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+For PostScript /Flate??Code compatibility, use gzcompress() and
+gzuncompress().
+
+For gzip compatibility, use gzdeflate() and gzinflate().
+
+Try to avoid gzopen() etc. unless you deal with large files that don't fit
+into memory as a whole.
+
+8. What are the two byte orders?
+""""""""""""""""""""""""""""""""
+If 0x41424344 is represented as "ABCD", the byte order is called:
+
+-- big endian
+-- MSB
+-- MSB first (preferred)
+-- most significant byte first
+-- most significant bit first
+-- MSB-to-LSB
+-- network byte order
+-- m68k byte order
+
+If 0x41424344 is represented as "DCBA", the byte order is called:
+
+-- little endian
+-- LSB
+-- LSB first (preferred)
+-- least significant byte first
+-- least significant bit first
+-- LSB-to-MSB
+-- VAX byte order
+-- PC (i386) byte order
+
+Most file formats associated with Flate use MSB first byte order. But one
+shuld always check the documentation of each file format individually.
+
+9a. How can I extract a ZIP file on UNIX?
+"""""""""""""""""""""""""""""""""""""""""
+ZIP files tend to have the extension `.zip'. The file to be extracted will
+be referred as `FILENAME.zip'.
+
+-- If you have the UNIX unzip(1) utility:
+
+	unzip FILENAME.zip
+
+   This will extract all files in the .zip.
+
+-- If you have the UNIX miniunzip(1) utility:
+
+	miniunzip FILENAME.zip
+
+   This will extract all files in the .zip.
+
+-- Otherwise, if you have the UNIX gzip(1) utility, and you need only the
+   first file in the .zip:
+
+	gzip -cd <FILENAME.zip >OUTFILE
+
+   Ignore the message: `gzip: stdin has more than one entry--rest ignored'
+
+-- Otherwise, if you have the UNIX gunzip(1) utility, and you need only the
+   first file in the .zip:
+
+	gunzip -c <FILENAME.zip >OUTFILE
+
+   Ignore the message: `gunzip: stdin has more than one entry--rest ignored'
+
+-- Otherwise, if you have the UNIX zcat(1) utility, and you need only the
+   first file in the .zip:
+
+	zcat <FILENAME.zip >OUTFILE
+
+   Ignore the message: `zcat: stdin has more than one entry--rest ignored'
+
+-- Otherwise, if you have the UNIX funzip(1) utility, and you need only the
+   first file in the .zip:
+
+	funzip <FILENAME.zip >OUTFILE
+
+   Ignore the message: `funzip warning: zipfile has more than one entry--rest ignored'
+
+9b. How can I extract a GZIP file on UNIX?
+""""""""""""""""""""""""""""""""""""""""""
+GZIP files tend to have the extension `.gz'. The file to be extracted will
+be referred as `FILENAME.gz'. The result of the extraction is exactly one
+file, it will be referred as `FILENAME'.
+
+-- If you have the UNIX gunzip(1) utility:
+
+	gunzip FILENAME.gz
+
+   or
+
+	gunzip -c <FILENAME.gz >FILENAME
+
+   If you get errors and `FILENAME' doesn't get created, use zcat(1), see
+   below.
+
+-- Otherwise, if you have the UNIX gzip(1) utility:
+
+	gzip -d FILENAME.gz
+
+   or
+
+	gzip -cd <FILENAME.gz >FILENAME
+
+   If you get errors and `FILENAME' doesn't get created, use zcat(1), see
+   below.
+
+-- Otherwise, if you have the UNIX zcat(1) utility, and you need only the
+   first file in the .zip:
+
+	zcat <FILENAME.gz >FILENAME
+
+-- Otherwise, if you have the UNIX funzip(1) utility, and you need only the
+   first file in the .zip:
+
+	funzip <FILENAME.gz >FILENAME
+
+-- Otherwise, if you have PHP installed, use the gzinflate() function. Give
+   the _contents_ of the .gz file as parameter. Be careful to open the file
+   in _binary_ mode.
+
+9c. How can I extract a ZLIB (/FlateEncode-d) file on UNIX?
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+See FAQ answer 4 for more about this file format.
+
+-- If you are able to uncompress GZIP files (see FAQ answer 9b): 
+
+   1. Optional: replace 4 bytes at the end of file with 8 zero bytes.
+
+   2. Replace the first 2 bytes with the following 10 bytes:
+
+	0x1f 0x8b 0x08 0x00 0x00 0x00 0x00 0x00 0x00 0xff
+
+   3. Optional: rename file to FILENAME.gz
+
+   4. Extract FILENAME.gz, as described in FAQ answer 9b. Use filters only
+      (commands with pipes: < and >). Ignore the following errors:
+
+	invalid compressed data--length error
+	invalid compressed data--crc error
+	unexpected end of file
+
+-- Otherwise, if you have GNU Ghostscript (command: gs) installed, run:
+
+	<FILENAME.deflated >FILENAME gs -dNODISPLAY -q -c '/i(%stdin)(r)file
+        /FlateDecode filter def/o(%stdout)(w)file def/s 4096 string def{i s
+        readstring exch o exch writestring not{exit}if}loop o closefile quit'
+
+-- Otherwise, if you have PHP installed, use the gzuncompress() function. Give
+   the _contents_ of the .gz file as parameter. Be careful to open the file
+   in _binary_ mode.
+
+9d. How can I create a ZLIB (/FlateEncode-d) file on UNIX?
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+-- See FAQ answer 4d about conversion of GZIP files to ZLIB files.
+
+-- Otherwise, if you have GNU Ghostscript (command: gs) installed, run:
+
+   <FILENAME >FILENAME.deflated gs -dNODISPLAY -q -c '/i(%stdin)(r)file def/o(%stdout)(w)file/FlateEncode filter def/s 4096 string def{i s readstring exch o exch writestring not{exit}if}loop o closefile quit'
+
+-- Otherwise, if you have PHP installed, use the gzdeflate() function. Give
+   the _contents_ of the input file as parameter.
+
+10. How to compute the Adler32 checksum?
+""""""""""""""""""""""""""""""""""""""""
+by pts@fazekas.hu at Sat Apr 20 12:27:32 CEST 2002
+
+From RFC 1950: Adler-32 is composed of two sums accumulated per byte: s1 is
+the sum of all bytes, s2 is the sum of all s1 values. Both sums
+are done modulo 65521. s1 is initialized to 1, s2 to zero.  The
+Adler-32 checksum is stored as s2*65536 + s1 in most-
+significant-byte first (network) order.
+
+The Adler32 checksum is 32 bits long. Here are some useful C language
+functions:
+
+	unsigned short s1, s2; /* Must be able to hold a value 0..65535 */
+	void adler32_init() { s1=1; s2=0; }
+	void adler32_update(char const *p, char const *pend) {
+	  /* Updates with p[0], p[1], ... pend[-1] */
+	  unsigned sold;
+	  for ( ; p!=pend; p++) {
+	    /* vvv 0xffff is needed since unsigned short may be > 0..65535 */
+	    sold=s1;
+	    s1=(s1+*(unsigned char const*)p)&0xffff;
+	    if (s1<sold) s1+=15; /* 15==65536-21 */
+	    sold=s2;
+	    s2=(s2+s1)&0xffff;
+	    if (s2<sold) s2+=15;
+	  }
+	}
+	void adler32_done(FILE *outf) {
+	  if (s1>=65521) s1-=65521;
+	  if (s2>=65521) s2-=65521;
+	  putc(s2>>8, outf);
+	  putc(s2, outf);
+	  putc(s1>>8, outf);
+	  putc(s1, outf);
+	}
+
+__END__

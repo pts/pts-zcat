@@ -1,0 +1,165 @@
+/* rewritten by pts@fazekas.hu at Fri Jun 29 23:42:40 CEST 2001 */
+
+/* used library functions */
+#define putcha putchar
+#define getcha getchar
+#define mallo  malloc
+#define fre    free
+#include <stdio.h> /* putchar(), getchar() */
+#include <stdlib.h> /* malloc(), free() */
+
+/* used integer types, except for main() */
+#define BYTE unsigned char /* 8 bits */
+#define WORD unsigned short /* >=16 bits */
+#define DWORD unsigned long /* >=32 bits */
+
+/* Compiles with: gcc -ansi -pedantic -W -Wall -Wstrict-prototypes -Wtraditional -Wnested-externs -Wpointer-arith -Wbad-function-cast -Wcast-qual -Wmissing-prototypes -Winline -Wmissing-declarations rcm.c */
+
+/* boolean handling is like in Java: comparison and logical operators return a
+ * boolean value, and if() tests only boolean, not int. (for tests int :-()
+ */
+
+int main(int argc, char **argv);
+WORD B(WORD l, WORD O);
+
+WORD
+  W[] =
+{16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15}, u[] =
+{3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258},
+  P[] =
+{0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0},
+  Q[] =
+{1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577},
+  L[] =
+{0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13},
+  y, C, t, Z[320], b[17], G[17];
+DWORD j;
+BYTE S[32768];
+struct node {
+  struct node *left, *right;
+  WORD value;
+} F, *V, *h, *I;
+
+WORD B(WORD param, WORD whichcode) {
+  if (whichcode==0) {
+    WORD o, q;
+    B (24, 1);
+    o = B (8, 1);
+    B (24, 1);
+    B (24, 1);
+    if (0!=(o & 4)) {
+      for (q = B (16, 1); q--; B (8, 1)) ;
+    }; 
+    for (; o & 8 && B (8, 1);) ;
+    for (; o & 16 && B (8, 1);) ;
+    if (0!=(o & 2)) B (16, 1);
+    for (o = 0; !o;) {
+      o = B (1, 1);
+      q = B (2, 1);
+      if (0!=q || 0!=B (8, 7)) {
+        if (0!=(q & 1)) B (7, 8);
+        if (0!=(q & 2)) B (3, 9);
+        B (5, 6);
+        I = V;
+        B (2, 4);
+        I = h;
+        B (9, 4);
+      }
+    }
+    for (; (C %= 32768) != (t %= 32768); putcha (C++[S]));
+  } else if (whichcode == 6) {
+    WORD oo, f;
+    for (; (oo = B (6, (I = V, 3))) != 256;) {
+      if (oo > 256 || 0!=(B (oo, 2), 0)) {
+        oo -= 257;
+	f = u[oo] + B (P[oo], 1);
+	I = h;
+	oo = B (5, 3);
+	oo = Q[oo] + B (L[oo], 1);
+	oo = oo <= t ? t - oo : 32768 - oo + t;
+	for (; f--; oo %= 32768) B (S[oo++], 2);
+      }
+    }
+  } else if (whichcode == 3) {
+    for (; I->left; I = B (1, 1) ? I->right : I->left);
+    return I->value;
+  } else if (whichcode == 5) {
+    WORD oo, q;
+    for (oo = 17; oo--; oo[b] = 0);
+    for (oo++; oo < param; oo++[Z][b]++);
+    for (*b = *G = oo = 0; oo < 16; oo++) {
+      G[oo + 1] = (oo[G] + b[oo]) << 1;;
+    }
+    for (I = 0, oo = 0; oo < param; oo++) {
+      if (0!=Z[oo]) {
+        struct node **e;
+        WORD o;
+        e = (q = oo[Z][G], Z[oo][G]++, o = Z[oo], &I);
+        for (;
+             o-- && (*e || ((*(*e = mallo (sizeof (struct node))) = F), 1));
+             e = ((q >> o) & 1) ? &(*e)->right : &(*e)->left
+             );
+        *(*e = mallo (sizeof (struct node))) = F;
+        (*e)->value = oo;
+      }
+    }
+  } else if (whichcode == 2) {
+    t++[S] = param;
+    if ((t %= 32768) == (C %= 32768)) putcha (C++[S]);
+  } else if (whichcode == 8) {
+    WORD oo;
+    for (oo = 288; oo--; Z[oo] = oo < 144 ? 8 : oo < 256 ? 9 : oo < 280 ? 7 : 8);
+    V = (B (288, 5), I);
+    for (oo = 32; oo--; Z[oo] = 5);
+    h = (B (32, 5), I);
+  } else if (whichcode == 1) {
+    WORD oo;
+    if (0!=param) {
+      for (; y < param; y += 8) j |= (0l + getcha ()) << y;
+      y -= param;
+      oo = j & ((1 << param) - 1);
+      j >>= param;
+      return oo;
+    } else return 0;
+  } else if (whichcode == 7) {
+    WORD oo;
+    if (0!=(y % 8)) B (y % 8, 1);
+    for (oo = B (16, 1), B (16, 1); oo--; B (B (8, 1), 2)) ;
+  } else if (whichcode == 9) {
+    WORD o, oo, ooo, f, q;
+    WORD p = B (5, 1) + 257, z = B (5, 1) + 1, v = B (4, 1) + 4;
+    for (oo = 0; oo < v; oo++[W][Z] = B (3, 1));
+    for (; 19 > oo; W[oo++][Z] = 0);
+    V = (B (19, 5), I);
+    for (ooo = oo = 0; oo < (p + z);) {
+      I = V;
+      o = B (3, 3);
+      f = o == 16
+        ? (o = ooo), 3 + B (2, 1) : o == 17 ?
+        (o = 0), 3 + B (3, 1) : o == 18 ? (o = 0),
+        11 + B (7, 1) : ((ooo = o), 1);
+      for (q = f; q--; oo++[Z] = o);
+    }
+    I = V;
+    B (9, 4);
+    V = (B (p, 5), I);
+    for (oo = z; oo--; Z[oo] = Z[oo + p]);
+    h = (B (z, 5), I);
+  } else if (whichcode == 4) {
+    struct node *i = I;
+    if (0!=i) {
+      I = i->left;
+      B (7, 4);
+      I = i->right;
+      fre(i);
+      B (1, 4);
+    }
+  }
+  return 0;
+}
+
+int main(int argc, char **argv) {
+  (void)argc;
+  (void)argv;
+  return B(3, 0);
+}

@@ -1,0 +1,783 @@
+/* muzcat.c -- a portable and minimalistic zcat (gzip -cd) implementation
+ * originally rcm.c
+ * original author: Ron McFarland <rcm@one.net>, 1996
+ * rewritten by pts@fazekas.hu at Fri Jun 29 23:42:40 CEST 2001
+ * Sat Jun 30 09:49:56 CEST 2001
+ * Sat Jun 30 16:01:11 CEST 2001 C, Java
+ * Sat Jul 21 10:43:19 CEST 2001
+ * Sat Jul 21 16:16:45 CEST 2001 OC, timings
+ *
+ * SUXX: we don't check for CRC
+ * SUXX: we don't validate file
+ * SUXX: we don't check for EOF
+ * SUXX: may segfault on invalid file
+ *
+ * Imp: PHP
+ * Imp: Perl
+ * OK : eliminate malloc(), only static storage in var `N'
+ * OK : eliminate pointers (`*')
+ * OK : works if WORD can hold a 16 bit signed integer
+ * OK : works with WORD defined as either `signed short' or `unsigned short'
+ *      The problems with %, / and >> have been solved. This means that
+ *      it should be easy to port to PostScript.
+ * OK : works with BYTE defined as either `signed char'  or `unsigned char'
+ * OK : eliminate DWORDs (32 bit integers)
+ * OK : add initialization of global variables
+ * OK : convert short, fixed loops to series of instructions
+ * OK : simplify if's
+ * OK : `for' -> `while'
+ *      This means that it should be easy to port to Ruby.
+ * OK : no `for', no `goto', no `break', no `continue'
+ * OK : unobfuscate [] handling
+ * OK : use ++, --, =, += etc. as a standalone instruction, not an operator.
+ *      This means that it should be easy to port to Python.
+ * OK : separate, named fv*() functions instead of B()
+ * OK : remove commas in favour of semicolons
+ * OK : eliminate operator `?:'
+ * OK : eliminate var `I'
+ * OK : boolean handling is like in Java: comparison and logical operators are
+ *      assumed to return a boolean value (which cannot be converted to/from
+ *      int), `if' and `while' test only boolean, not int.
+ * OK : eliminate logical operators: `&&', '||'
+ * OK : runs fine with checkergcc, even in OC mode
+ * Dat: no signed integers, just unsigned
+ * Dat: no var `l' anymore
+ * Dat: no var `O' anymore
+ * Dat: global variables: one letter, upper case
+ * Dat: no octal and hexadecimal constants in the source
+ * Dat: no multiplication or division, just bit shifts
+ * Dat: compiles with: gcc -s -O3 -ansi -pedantic -W -Wall -Wstrict-prototypes -Wtraditional -Wnested-externs -Wpointer-arith -Wbad-function-cast -Wcast-qual -Wmissing-prototypes -Winline -Wmissing-declarations rcm.c
+ * Dat: dependency of functions:
+ *	# `f g' means: g calls f.
+ *	fvMain main
+ *	fvRead fvMain
+ *	fvNewnode fvMain
+ *	fvDescend fvMain
+ *	fvFree fvMain
+ *	fvWrite fvMain
+ *	fvRead fvDescend
+ *	fvNalloc fvNewnode
+ * Dat: functions are listed avoiding forward dependency
+ * Dat: no initialized var decls: `int a=42;'
+ * Dat: no inner var decls: `if (1) { int a; }'
+ * Dat: no multiple var decls: `int a, b;'
+ * Dat: function local (i.e automatic) var decls are prefixed by LOCAL_VAR
+ */
+
+#undef my_getchar
+#undef my_putchar
+#undef BYTE
+#undef WORD
+#undef STATIC_FUNC
+#undef STATIC_VAR
+#undef ENDDOT
+#undef NEED_DECLS
+#undef ARRAY
+#undef SHR
+#undef SHL
+#undef ADD
+#undef SUB
+#undef HAVE_ARRAY_INIT
+
+#if CFG_LANG_JAVA
+  /* Any javac and JVM will suffice, JRE >=1.1 is required.
+   *
+   * .class file size: 5076 bytes
+   * Test Bash:    5590ms user
+   * Test Random:  1440ms user
+   * Test Misc:    6490ms user
+   *
+   */
+  #define BYTE int
+  #define WORD int
+  #define CONST final
+  #define STATIC_FUNC static protected
+  #define STATIC_VAR  static protected
+  #define LOCAL_VAR
+  #define ENDDOT }
+  #define NO_ARGS
+  #define VOID void
+  #define RETURN_VOID
+  #undef NEED_DECLS
+  #define ARRAY(type,name,length) type name[]=new type[length]
+  #define HAVE_ARRAY_INIT 1
+  #define ARRAY_INIT(type,name,init) type name[]=init
+  #define SHL(a,b) ((a)<<(b))
+  /* ^^^ SHL(a,b): Precondition: 0<=b && b<=15 */
+  #define SHR(a,b) ((a)>>(b)) /* even >>> works OK */
+  /* ^^^ SHR(a,b): Precondition: 0<=b && b<=14 (!!) */
+  #define ADD(r,a) r+=(a) /* stupid Java, disallows extra parens */
+  #define SUB(r,a) r-=(a)
+  #define SLIDE(r) r++; r&=32767 /* stupid Java, disallows extra parens */
+  /* ^^^ SLIDE(r): increments the var `r', modulo 32768. Precondition:
+   *     0<=r<32768. Postcondition: 0<=r<32768.
+   */
+  #define TAND_1(a) (0!=((a)&1))
+  /* ^^^ TAND_1(a) is true iff a is odd */
+  #define TAND_P(a,p) (0!=((a)&(p)))
+  /* ^^^ TAND_P(a,p) is true iff 0!=(a&p). Precondition: p must be a power
+   *     of two (!), such as: 1, 2, 4, 8, 16.
+   */
+  #define AND_255(a) ((a)&255)
+  #define AND_7(a) ((a)&7)
+  #define AND_LOW(a,b) ((a)&((1<<(b))-1))
+  #define TWICE(a) ((a)<<1)
+  #define INCR(r) r++ /* stupid Java, disallows extra parens */
+  #define DECR(r) r-- /* stupid Java, disallows extra parens */
+  #if 0 /* unused */
+    #define LAND(a,b) ((a) && (b))
+    /* ^^^ returns true (testable by `if') iff both `a' and `b' are true */
+  #endif
+  import java.io.IOException;
+  public class ZCat {
+    public static void main(String[] args) {
+      fvMain();
+      System.out.flush();
+    }
+    public static WORD my_getchar() {
+      try {
+        int i=System.in.read();
+        if (i<0) System.exit(2);
+        return (WORD)(i&255);
+      } catch (IOException e) {
+        System.exit(3);
+      }
+      return 0;
+    }
+    public static void my_putchar(WORD b) {
+      /* try { */
+        System.out.write((byte)b);
+      /* } catch (IOException e) {} */
+    }
+#elif CFG_LANG_OC
+  /* This works since Sat Jul 21 15:57:03 CEST 2001.
+   *
+   * OC (Obfuscated C) is a simplistic, C-like programming language invented
+   * and implemented by Lennart Augustsson <augustss@carlstedt.se>. OC's most
+   * remarkable property is that the overall size of OC runtime environment
+   * and the OC compiler is less than 3400 bytes (!!) (measuring the C
+   * source code).
+   *
+   * You can dowload OC from http://www.ioccc.org. Search for the 1996 contest
+   * entries, and download `august' (Lennart Augostsson's entry).
+   *
+   * OC bytecode size: 4876 bytes (could be easily reduced to 4000)
+   * Required memory: 48000 bytes (august.c compiled with -DZ=48000)
+   * Test Bash:   22720ms user
+   * Test Random:  3250ms user
+   * Test Misc:   20900ms user
+   *
+   * Special care was taken to make this program work in OC because OC has a
+   * rather minimal instruction set (see below), and both the runtime
+   * environment and the compile impose limitations on code size and memory
+   * usage.
+   */
+  #define BYTE char
+  #define WORD int
+  #define STATIC_FUNC
+  #define STATIC_VAR
+  #define LOCAL_VAR
+  #define CONST
+  #define my_putchar putchar
+  #define my_getchar getchar
+  #undef NEED_DECLS
+  #define NO_ARGS
+  #define VOID int
+  #define RETURN_VOID return 0; /* might have been omitted... */
+  #define ARRAY(type,name,length) type name[length]
+  #define HAVE_ARRAY_INIT 0
+  #define SHL(a,b) ((a)*powtwo[b])
+  #define SHR(a,b) ((a)/powtwo[b])
+  #define ADD(r,a) ((r)=(r)+(a))
+  #define SUB(r,a) ((r)=(r)-(a))
+  #define SLIDE(r) if (r==32767) r=0; else INCR(r)
+  #define TAND_1(a) (0!=((a)%2))
+  #define TAND_P(a,p) (0!=((a)/(p)%2))
+  #define AND_255(a) ((a)%256)
+  #define AND_7(a) ((a)%8)
+  #define AND_LOW(a,b) ((a)%powtwo[b])
+  #define TWICE(a) ((a)*2)
+  #if 1 /* works! */
+    #define INCR(r) ((r)++)
+    #define DECR(r) ((r)--)
+  #else
+    #define INCR(r) ((r)=(r)+1)
+    #define DECR(r) ((r)=(r)-1)
+  #endif
+  /* code OK: int main() { int a; (a)=(65); putchar((a)); } */
+  /* code OK: void main(void) { int a; (a)=(65); putchar((a)); } */
+  /* OK : no += etc.; but ++ and -- is allowed (see parse.oc, fac.oc) */
+  /* OK : no bitwise operations: `&', `|', `^', `~' */
+  /* OK : no logical operators: `&&', '||' */
+  /* OK : no bit shift operators; `<<', '>>' */
+  /* OK : no array initializers */
+  /* OK : no initialized var decls: `int a=42;' */
+  /* OK : no inner var decls; `if (1) { int a; }' */
+  /* OK : no argc, argv in main */
+  /* OK : ensure powtwo[16] unused */
+  /* OK : function return types cannot be void */
+  /* OK : bytecode size reduced <5000, so it compiles with august.c */
+  /* OK : variable names must be /[a-z]+/ */
+  /* Imp: eliminate 32768 */
+  /* OK : no comparison operators `>', `>=', `<=' */
+  
+  #define N n
+  #define D d
+  #define T t
+  #define C c
+  #define J j
+  #define Y y
+  #define Z z
+  #define B b
+  #define G g
+  #define S s
+  #define constW cw
+  #define constU cu
+  #define constP cp
+  #define constQ cq
+  #define constL cl
+  #define fvMain fvmain
+  #define fvNalloc fvnalloc
+  #define fvFree fvfree
+  #define fvDescend fvdescend
+  #define fvWrite fvwrite
+  #define fvNewnode fvnewnode
+  #define fvRead fvread
+  STATIC_VAR WORD powtwo[16];
+  /* void ocinit(NO_ARGS) { */
+  /* } */
+  #define ENDDOT \
+    int main() { \
+      int o; \
+      int q; \
+      /* powtwo[0]=1; powtwo[1]=2; powtwo[2]=4; powtwo[3]=8; powtwo[4]=16; powtwo[5]=32; \
+      powtwo[6]=64; powtwo[7]=128; powtwo[8]=256; powtwo[9]=512; powtwo[10]=1024; \
+      powtwo[11]=2048; powtwo[12]=4096; powtwo[13]=8192; powtwo[14]=16384; \
+      powtwo[15]=32768; */ \
+      /* powtwo[16]=65536; */ \
+      /* constQ[0]=1; constQ[1]=2; constQ[2]=3; constQ[3]=4; constQ[4]=5; constQ[5]=7; constQ[6]=9; constQ[7]=13; constQ[8]=17; constQ[9]=25; constQ[10]=33; constQ[11]=49; constQ[12]=65; constQ[13]=97; constQ[14]=129; constQ[15]=193; constQ[16]=257; constQ[17]=385; constQ[18]=513; constQ[19]=769; constQ[20]=1025; constQ[21]=1537; constQ[22]=2049; constQ[23]=3073; constQ[24]=4097; constQ[25]=6145; constQ[26]=8193; constQ[27]=12289; constQ[28]=16385; constQ[29]=24577; */ \
+      o=1; q=0; while (q<30) { constQ[q]=o+1; INCR(q); constQ[q]=o*3/2+1; INCR(q); o=o*2; } \
+      constQ[0]=1; \
+      o=1; q=0; while (q<16) { powtwo[q]=o; INCR(q); o=o*2; } \
+      q=0; while (q<30) { constL[q]=q/2-(1<q); INCR(q); } /* !! uses bool as int */ \
+      /* constL[0]=0; constL[1]=0; constL[2]=0; constL[3]=0; constL[4]=1; constL[5]=1; constL[6]=2; constL[7]=2; constL[8]=3; constL[9]=3; constL[10]=4; constL[11]=4; constL[12]=5; constL[13]=5; constL[14]=6; constL[15]=6; constL[16]=7; constL[17]=7; constL[18]=8; constL[19]=8; constL[20]=9; constL[21]=9; constL[22]=10; constL[23]=10; constL[24]=11; constL[25]=11; constL[26]=12; constL[27]=12; constL[28]=13; constL[29]=13; */ \
+      constU[0]=3; constU[1]=4; constU[2]=5; constU[3]=6; constU[4]=7; constU[5]=8; constU[6]=9; constU[7]=10; constU[8]=11; constU[9]=13; constU[10]=15; constU[11]=17; constU[12]=19; constU[13]=23; constU[14]=27; constU[15]=31; constU[16]=35; constU[17]=43; constU[18]=51; constU[19]=59; constU[20]=67; constU[21]=83; constU[22]=99; constU[23]=115; constU[24]=131; constU[25]=163; constU[26]=195; constU[27]=227; constU[28]=258; \
+      constW[0]=16; constW[1]=17; constW[2]=18; constW[3]=0; constW[4]=8; constW[5]=7; constW[6]=9; constW[7]=6; constW[8]=10; constW[9]=5; constW[10]=11; constW[11]=4; constW[12]=12; constW[13]=3; constW[14]=13; constW[15]=2; constW[16]=14; constW[17]=1; constW[18]=15; \
+      constP[0]=0; constP[1]=0; constP[2]=0; constP[3]=0; constP[4]=0; constP[5]=0; constP[6]=0; constP[7]=0; constP[8]=1; constP[9]=1; constP[10]=1; constP[11]=1; constP[12]=2; constP[13]=2; constP[14]=2; constP[15]=2; constP[16]=3; constP[17]=3; constP[18]=3; constP[19]=3; constP[20]=4; constP[21]=4; constP[22]=4; constP[23]=4; constP[24]=5; constP[25]=5; constP[26]=5; constP[27]=5; constP[28]=0; \
+      fvMain(); \
+      return 0; }
+#elif CFG_LANG_ANSIC_SIGNED
+  /* Compile: gcc -s -O3 -DCFG_LANG_ANSIC_SIGNED=1 -ansi -pedantic -W -Wall -Wstrict-prototypes -Wtraditional -Wnested-externs -Wpointer-arith -Wbad-function-cast -Wcast-qual -Wmissing-prototypes -Winline -Wmissing-declarations munzip.c
+   *
+   * Test Bash:     340ms user
+   * Test Random:    70ms user
+   * Test Misc:     360ms user
+   */
+  #define SHL(a,b) ((a)<<(b))
+  #define SHR(a,b) ((a)>>(b))
+  #define my_putchar putchar
+  #define my_getchar getchar
+  #include <stdio.h> /* putchar(), getchar() */
+  #define BYTE signed char
+  #define WORD signed short
+  #define STATIC_FUNC static
+  #define STATIC_VAR  static
+  #define LOCAL_VAR
+  /* #define LOCAL_VAR auto -- also possible */
+  #define CONST const
+  #define ENDDOT
+  #define NEED_DECLS 1
+  #define NO_ARGS void
+  #define VOID void
+  #define RETURN_VOID
+  #define ARRAY(type,name,length) type name[length]
+  #define HAVE_ARRAY_INIT 1
+  #define ADD(r,a) ((r)+=(a))
+  #define SUB(r,a) ((r)-=(a))
+  #define SLIDE(r) (r)++; (r)&=32767
+  #define TAND_1(a) (0!=((a)&1))
+  #define TAND_P(a,p) (0!=((a)&(p)))
+  #define AND_255(a) ((a)&255)
+  #define AND_7(a) ((a)&7)
+  #define AND_LOW(a,b) ((a)&((1<<(b))-1))
+  #define TWICE(a) ((a)<<1)
+  #define INCR(r) ((r)++)
+  #define DECR(r) ((r)--)
+  static void fvMain(void);
+  int main(int argc, char **argv);
+  int main(int argc, char **argv) {
+    (void)argc; (void)argv;
+    fvMain();
+    return 0;
+  }
+#else /* ANSI C, with unsigned integers */
+  /* Compile: gcc -s -O3 -DCFG_LANG_ANSIC=1 -ansi -pedantic -W -Wall -Wstrict-prototypes -Wtraditional -Wnested-externs -Wpointer-arith -Wbad-function-cast -Wcast-qual -Wmissing-prototypes -Winline -Wmissing-declarations munzip.c
+   *
+   * Test Bash:     350ms user
+   * Test Random:    70ms user
+   * Test Misc:     370ms user
+   */
+  #undef  CFG_LANG_ANSIC
+  #define CFG_LANG_ANSIC 1
+  #define SHL(a,b) ((a)<<(b))
+  #define SHR(a,b) ((a)>>(b))
+  /* used library functions */
+  #define my_putchar putchar
+  #define my_getchar getchar
+  #include <stdio.h> /* putchar(), getchar() */
+  /* used integer types, except for main() */
+  #define BYTE unsigned char /* 8 bits */
+  #define WORD unsigned short /* >=16 bits; works either unsigned or signed */
+  #define STATIC_FUNC static
+  #define STATIC_VAR  static
+  #define LOCAL_VAR
+  /* #define LOCAL_VAR auto -- also possible */
+  #define CONST const
+  #define ENDDOT
+  #define NEED_DECLS 1
+  #define NO_ARGS void
+  #define VOID void
+  #define RETURN_VOID
+  #define ARRAY(type,name,length) type name[length]
+  #define HAVE_ARRAY_INIT 1
+  #define ADD(r,a) ((r)+=(a))
+  #define SUB(r,a) ((r)-=(a))
+  #define SLIDE(r) (r)++; (r)&=32767
+  #define TAND_1(a) (0!=((a)&1))
+  #define TAND_P(a,p) (0!=((a)&(p)))
+  #define AND_255(a) ((a)&255)
+  #define AND_7(a) ((a)&7)
+  #define AND_LOW(a,b) ((a)&((1<<(b))-1))
+  #define TWICE(a) ((a)<<1)
+  #define INCR(r) ((r)++)
+  #define DECR(r) ((r)--)
+  static void fvMain(void);
+  int main(int argc, char **argv);
+  int main(int argc, char **argv) {
+    (void)argc; (void)argv;
+    fvMain();
+    return 0;
+  }
+#endif
+
+/* datatype declarations
+ * It would be simple to define a struct for the binary Huffmann tree we
+ * need for decompression as:
+ * 
+ *      struct node {
+ *        struct node *left, *right;
+ *        WORD value;
+ *      };
+ * 
+ * But this approach would mean that we would need `pointer's. Many programming
+ * languages don't have pointers, so the program would be less portable (but
+ * the source would be more readable). So we use the array `N' for representing
+ * nodes (one WORD for left, one WORD for right, one WORD for value). Nodes
+ * are addressed with their node number (NODEN) in the array N. Every NODEN is
+ * divisible by 3. `F' points to the first free node. Free nodes have their
+ * left pointer pointing to the next free node. There is always a `next' free
+ * node (i.e we don't have to deal with out-of-memory errors) beacuse the gzip
+ * algorithm guarantees that the array `N' never exhausts.
+ * The following formula is bad: 1998 > 3*(286+2+30+2), one has too examine
+ * the RFC again :-(. Empirically: 1996 and 1997 are not enough, 1998 is.
+ */
+#undef NULL
+#define NULL 0
+#undef NODEN
+#define NODEN WORD
+STATIC_VAR ARRAY(WORD,N,1998);
+/**
+ * Index of the first free node in <code>N</code>.
+ */
+STATIC_VAR NODEN D;
+#define LEFT(noden)  (N[(noden)+0]) /* unused */
+#define RIGHT(noden) (N[(noden)+1]) /* unused */
+#define NVAL(noden)  (N[(noden)+2]) /* unused */
+
+#if NEED_DECLS
+/* function declarations */
+STATIC_FUNC VOID fvMain(NO_ARGS);
+STATIC_FUNC NODEN fvNalloc(NO_ARGS);
+STATIC_FUNC VOID fvFree(NODEN root);
+STATIC_FUNC WORD fvDescend(NODEN root);
+STATIC_FUNC VOID fvWrite(WORD param);
+STATIC_FUNC NODEN fvNewnode(WORD param);
+STATIC_FUNC WORD fvRead(WORD param);
+#endif
+
+/* constant arrays (lookup tables) */
+#if HAVE_ARRAY_INIT
+  STATIC_VAR CONST WORD constW[] = {16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
+  STATIC_VAR CONST WORD constU[] = {3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258};
+  STATIC_VAR CONST WORD constP[] = {0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0};
+  STATIC_VAR CONST WORD constQ[] = {1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577};
+  STATIC_VAR CONST WORD constL[] = {0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13};
+#else
+  STATIC_VAR CONST WORD constW[19];
+  STATIC_VAR CONST WORD constU[29];
+  STATIC_VAR CONST WORD constP[29];
+  STATIC_VAR CONST WORD constQ[30];
+  STATIC_VAR CONST WORD constL[30];
+#endif
+
+STATIC_VAR WORD C; /* index (in S) of the oldest char, [0..32767] */
+STATIC_VAR WORD T; /* index (in S) of the first free position, [0..32767] */
+
+/**
+ * A buffer of 16 bits for storing bits read but not processed yet. Needed
+ * because we can read only bytes, not bits with getchar(). Was 32 bits,
+ * but could be reduced.
+ * Used by only fvRead().
+ */
+STATIC_VAR WORD J;
+/**
+ * The number of bits in the buffer <code>J</code>. Used only in fvRead();
+ */
+STATIC_VAR WORD Y;
+
+STATIC_VAR ARRAY(WORD,Z,320);
+STATIC_VAR ARRAY(WORD,B,17);
+STATIC_VAR ARRAY(WORD,G,17);
+STATIC_VAR ARRAY(BYTE,S,32768);
+
+/**
+ * Reads <code>param</code> bits from input.
+ * @param param number of bits to read
+ * @return WORD, consisting of the bits
+ * @whichcode 1
+ */
+STATIC_FUNC WORD fvRead(WORD param) {
+  LOCAL_VAR WORD oo;
+  LOCAL_VAR WORD f;
+  if (0!=param) {
+    /* Assert: 0<=Y && Y<=7; */
+    /* Assert: 1<=param && param<=16; */
+    /* if (Y>7 || param>16) abort(); */
+    /* J can hold at most 16 bits, may be signed or unsigned */
+    if (Y+7 < param) {
+      /* ^^^ `if' is ok instead of `while', because of the asserts above */
+      ADD(J,SHL(AND_255(my_getchar()),Y));
+      ADD(Y,8);
+    }
+    if (Y < param) { /* Y < param < Y+8 */
+      f=AND_255(my_getchar());
+      if (param==16) {
+        /* Assert: 9<=Y && Y<=15 */
+        oo=J+SHL(AND_LOW(f,16-Y),Y);
+        J=SHR(f, 16-Y); /* 1 <= 16-Y <= 7, it's safe to call SHR */
+      } else {
+        oo = AND_LOW(J+SHL(f,Y), param);
+        J = SHR(f, param-Y); /* 0<=f && f<=255, no need to cast to unsigned */
+        /* ^^^ 1<=param-Y && param-Y<=7, so it's safe to call SHR */
+      }
+      ADD(Y, 8-param); /* 8-param may be negative, but Y remains nonnegative */
+    } else { /* Y >= param */
+      /* Assert: 1<=Y && Y<=8; */
+      /* Assert: 1<=param && param<=8; */
+      oo = AND_LOW(J, param);
+      SUB(Y,param);
+      J = AND_LOW(SHR(J, param), Y); /* J >>= param; */
+      /* ^^^ this has been corrected to be signedness-independent */
+      /* ^^^ 1<=param && param<=8, so it's safe to call SHR */
+    }
+    /* fprintf(stderr, "read %d\n", oo&0xffff); */
+    return oo;
+  } else return 0;
+}
+
+/** 
+ * Allocates a new node and initializes it with empty content. This function
+ * lets we get rid of the global variable F (which was buggily uninitialized
+ * in the original scm.c).
+ * @return pointer to the newly allocated node
+ * @whichcode -1
+ */
+STATIC_FUNC NODEN fvNalloc(NO_ARGS) {
+  NODEN o; /* the first free */
+  o=D;
+  D=N[o]; /* not free anymore */
+  N[o]=NULL; /* clear; the other two fields are already cleared */
+  /* N[n+1]=NULL; N[n+2]=0; */
+  /* fprintf(stderr, "alloc %d\n", n); */
+  return o;
+}
+
+/**
+ * Frees the Huffman tree originating from <code>root</code> recursively.
+ * Used <code>I</code> as input only.
+ * Moved <code>I</code> into a parameter.
+ */
+STATIC_FUNC VOID fvFree(NODEN root) {
+  if (NULL!=root) {
+    fvFree(N[root]);
+    fvFree(N[root+1]);
+    /* fprintf(stderr, "free %d\n", root); */
+    N[root+1]=NULL; /* clear */
+    N[root+2]=0; /* clear */
+    N[root]=D; /* link to the beginning of the free list */
+    D=root; /* set it free */
+  }
+  RETURN_VOID;
+}
+
+/**
+ * Goes down (descends) enough levels in the binary tree of (struct node)s.
+ * Reads numbers from input encoded as a Huffman tree represented by the
+ * (struct node)s.
+ * Called only from 2 places.
+ * Used <code>I</code> as both input and output, but the output is never used in the
+ * program. So I've put <code>I</code> to a parameter.
+ * @param root is only for input
+ * @whichcode 3
+ */
+STATIC_FUNC WORD fvDescend(NODEN root) {
+  while (NULL!=N[root]) {
+    if (0!=fvRead(1)) root=N[root+1]; else root=N[root];
+  }
+  return N[root+2]; /* root->value; */
+}
+
+/**
+ * Allocates new (struct node)s. Very probably this is the Huffman tree
+ * builder.
+ * Used <code>I</code> as output only, so I moved it to the return value.
+ * @return the root of the Huffman tree just built
+ * @whichcode 5
+ */
+STATIC_FUNC NODEN fvNewnode(WORD param) {
+  LOCAL_VAR WORD oo;
+  LOCAL_VAR WORD q;
+  LOCAL_VAR WORD o;
+  LOCAL_VAR WORD e;
+  /* NODEN anode; */
+  B[0]=0; B[1]=0; B[2]=0; B[3]=0; B[4]=0; B[5]=0; B[6]=0; B[7]=0; B[8]=0;
+  B[9]=0; B[10]=0; B[11]=0; B[12]=0; B[13]=0; B[14]=0; B[15]=0; B[16]=0;
+  oo=0;
+  while (oo < param) { INCR(B[Z[oo]]); INCR(oo); }
+  B[0]=0;
+  G[0]=0;
+  G[ 1] = TWICE(G[ 0]+B[ 0]); G[ 2] = TWICE(G[ 1]+B[ 1]);
+  G[ 3] = TWICE(G[ 2]+B[ 2]); G[ 4] = TWICE(G[ 3]+B[ 3]);
+  G[ 5] = TWICE(G[ 4]+B[ 4]); G[ 6] = TWICE(G[ 5]+B[ 5]);
+  G[ 7] = TWICE(G[ 6]+B[ 6]); G[ 8] = TWICE(G[ 7]+B[ 7]);
+  G[ 9] = TWICE(G[ 8]+B[ 8]); G[10] = TWICE(G[ 9]+B[ 9]);
+  G[11] = TWICE(G[10]+B[10]); G[12] = TWICE(G[11]+B[11]);
+  G[13] = TWICE(G[12]+B[12]); G[14] = TWICE(G[13]+B[13]);
+  G[15] = TWICE(G[14]+B[14]); G[16] = TWICE(G[15]+B[15]);
+  /* anode is the ->left pointer of the Sentinel node */
+  N[3]=NULL; /* anode=NULL; */
+  oo=0;
+  while (oo < param) {
+    if (0!=Z[oo]) {
+      /* WORD o, e; */ /* struct node **e; */
+      q = G[Z[oo]];
+      INCR(G[Z[oo]]);
+      e=3; /* e=&anode; */
+      o = Z[oo];
+      while (o!=0) {
+        DECR(o);
+        if (N[e]==NULL) N[e]=fvNalloc();
+        /* if (0!=((q>>o)&1)) e=&(*e)->right; else e=&(*e)->left; */
+        if (TAND_P(q,SHL(1,o))) e=N[e]+1; else e=N[e]+0;
+      }
+      N[e]=fvNalloc();
+      N[N[e]+2]=oo; /* (*e)->value=oo; */
+    }
+    INCR(oo);
+  }
+  return N[3];
+}
+
+/**
+ * Writes out a character if available.
+ * @whichcode 2
+ */
+STATIC_FUNC VOID fvWrite(WORD param) {
+  /* fprintf(stderr, "write %d\n", param&0xffff); */
+  #if 0
+    /* we don't need this because T and C are already in [0..32767] */
+    T&=32767;
+  #endif
+  S[T] = param;
+  SLIDE(T); /* T++; T&=32767; */
+  if (T==C) {
+    my_putchar(S[C]);
+    SLIDE(C); /* C++; C&=32767; */
+  }
+  RETURN_VOID;
+}
+
+/**
+ * @whichcode 0, 6
+ */
+STATIC_FUNC VOID fvMain(NO_ARGS) {
+  LOCAL_VAR WORD o;
+  LOCAL_VAR WORD q;
+  /* vvv sub-locals */
+  LOCAL_VAR WORD oo;
+  LOCAL_VAR WORD ooo;
+  LOCAL_VAR WORD oooo;
+  LOCAL_VAR WORD f;
+  LOCAL_VAR WORD p;
+  LOCAL_VAR WORD x;
+  /**
+   * Root of the first  Huffman tree in <code>N</code>. (see RFC)
+   */
+  LOCAL_VAR NODEN v;
+  /**
+   * Root of the second Huffman tree in <code>N</code>. (see RFC)
+   */
+  LOCAL_VAR NODEN h;
+  
+  J=0; Y=0; C=0; T=0;
+  v=NULL; h=NULL;
+  N[0]=NULL; N[1]=NULL; N[2]=0; /* the NULL node is initially empty */
+  N[3]=NULL; N[4]=NULL; N[5]=0; /* the Sentinel node is initially empty */
+  D=6; /* first free node is 6. `0' is NULL, `3' is Sentinel */
+  o=D;
+  while (o<1998) {
+    N[o]=o+3;  INCR(o); /* next free node is next node */
+    N[o]=NULL; INCR(o); /* empty RIGHT */
+    N[o]=0;    INCR(o); /* empty NVAL */
+  }
+  /* The most simple gzip header (10 bytes): 
+   * ID1   hex 0x1f
+   * ID2   hex 0x8b
+   * CM    hex 0x08
+   * FLG   hex 0x00
+   * MTIME hex 0x00, 0x00, 0x00, 0x00
+   * XFL   hex 0x00
+   * OS    hex 0xff
+   * After that comes the compressed data stream.
+   * After that comes hte CRC32 and ISIZE (byte aligned? ?)
+   */
+  fvRead(16); fvRead(8); /* ignore ID1, ID2 and CM */
+  o = fvRead(8); /* FLG */
+  #if 0
+    fvRead(8); fvRead(16); /* ignore fvRead(24); */
+    fvRead(8); fvRead(16); /* fvRead(24); */
+  #else
+    fvRead(16); fvRead(16); /* ignore MTIME */
+    fvRead(8); /* ignore XFL */
+    fvRead(8); /* ignore OS */
+  #endif
+  if (TAND_P(o,4)) { /* ignore FEXTRA */
+    q=fvRead(16);
+    while (q!=0) { fvRead(8); DECR(q); }
+  }
+  if (TAND_P(o,8)) while (0!=fvRead(8)) ; /* ignore FNAME */
+  if (TAND_P(o,16)) while (0!=fvRead(8)) ; /* ignore FCOMMENT */
+  if (TAND_P(o,2)) fvRead(16); /* ignore FHCRC */
+  o = 0;
+  while (o==0) {
+    o = fvRead(1);
+    q = fvRead(2);
+    if (0!=q) {
+      if (TAND_1(q)) { /* inline: fv(..., 8); */
+        /* WORD oo; */
+        oo=288;
+        while (oo!=0) {
+          DECR(oo);
+          /* Z[oo] = oo < 144 ? 8
+                : oo < 256 ? 9
+                : oo < 280 ? 7
+                : 8; */
+          #if 0
+            if (144<=oo && oo<256) Z[oo]=9;
+            else if (256<=oo && oo<280) Z[oo]=7;
+            else Z[oo]=8;
+          #else /* this doesn't require && */
+                 if (oo < 144) Z[oo]=8;
+            else if (oo < 256) Z[oo]=9;
+            else if (oo < 280) Z[oo]=7;
+            else               Z[oo]=8;
+          #endif
+        }
+        v=fvNewnode(288);
+        Z[ 0]=5; Z[ 1]=5; Z[ 2]=5; Z[ 3]=5; Z[ 4]=5; Z[ 5]=5; Z[ 6]=5; Z[ 7]=5;
+        Z[ 8]=5; Z[ 9]=5; Z[10]=5; Z[11]=5; Z[12]=5; Z[13]=5; Z[14]=5; Z[15]=5;
+        Z[16]=5; Z[17]=5; Z[18]=5; Z[19]=5; Z[20]=5; Z[21]=5; Z[22]=5; Z[23]=5;
+        Z[24]=5; Z[25]=5; Z[26]=5; Z[27]=5; Z[28]=5; Z[29]=5; Z[30]=5; Z[31]=5;
+        h=fvNewnode(32);
+      }
+      if (TAND_P(q,2)) { /* inline: fv(..., 9); */
+        /* WORD oo, ooo, oooo, f, p, x, v; */
+        p = fvRead(5) + 257;
+        x = fvRead(5) + 1;
+        v = fvRead(4) + 4; /* small v */
+        oo = 0;
+        while (oo < v)  { Z[constW[oo]] = fvRead(3); INCR(oo); } /* small v */
+        while (oo < 19) { Z[constW[oo]] = 0; INCR(oo); }
+        v=fvNewnode(19);
+        ooo=0;
+        oo=0;
+        while (oo < p + x) {
+          oooo = fvDescend(v);
+          /* f = o == 16 ? ((o = ooo), 3 + fvRead(2))
+               : o == 17 ? ((o = 0), 3 + fvRead(3))
+               : o == 18 ? ((o = 0), 11 + fvRead(7))
+               : ((ooo = o), 1); */
+          if (oooo==16) { oooo=ooo; f=3+fvRead(2); }
+          else if (oooo==17) { oooo=0; f=3+fvRead(3); }
+          else if (oooo==18) { oooo=0; f=11+fvRead(7); }
+          else { ooo=oooo; f=1; }
+          q=f;
+          while (q!=0) { Z[oo] = oooo; INCR(oo); DECR(q); }
+        }
+        fvFree(v);
+        v=fvNewnode(p);
+        oo=x;
+        while (oo!=0) { DECR(oo); Z[oo] = Z[oo + p]; }
+        h=fvNewnode(x);
+      }
+      /* inline: fv(..., 6); */
+      /* WORD oo, f; */
+      oo=fvDescend(v);
+      while (oo != 256) {
+        if (256 < oo) {
+          SUB(oo,257);
+          f = constU[oo] + fvRead(constP[oo]);
+          oo = fvDescend(h);
+          oo = constQ[oo] + fvRead(constL[oo]);
+          /* oo = oo <= T ? T - oo : 32768 - oo + T; */
+          if (T<oo) oo=32768-oo+T; else oo=T-oo;
+          while (f!=0) {
+            fvWrite(S[oo]);
+            SLIDE(oo); /* oo++; oo&=32767; */ /* oo %= 32768; */
+            DECR(f);
+          }
+        } else fvWrite(oo);
+        oo=fvDescend(v);
+      }
+      fvFree(v);
+      fvFree(h);
+    } else { /* inline: fv(..., 7); */
+    /**
+     * Copies a block of input to output (mostly) verbatim. (This is because
+     * some blocks cannot be effectively compressed, so gzip has inserted them as
+     * is.)
+     * @whichcode 7
+     */
+      /* WORD oo; */
+      fvRead(AND_7(Y));
+      oo=fvRead(16); /* length of block */
+      /* fprintf(stderr, "BLK %d\n", oo&0xffff); */
+      fvRead(16); /* one's complement of length; ignored */
+      while (oo!=0) { fvWrite(fvRead(8)); DECR(oo); }
+    }
+  }
+  #if 0
+    /* we don't need this because T and C are already in [0..32767] */
+    T&=32767; C&=32767; /* T%=32768; C%=32768; */
+  #endif
+  while (C!=T) {
+    my_putchar(S[C]);
+    SLIDE(C); /* C++; C&=32767; */ /* C%=32768; */
+  }
+  /* CRC32 and ISIZE remaining */
+  while (-1<my_getchar()) ; /* read whole input to avoid `Broken pipe' messages */
+  /* ^^^ corrected bug: [0..255] */
+  RETURN_VOID;
+}
+
+ENDDOT

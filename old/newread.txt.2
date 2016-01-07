@@ -1,0 +1,118 @@
+by pts@fazekas.hu at Mon Dec 24 22:19:04 CET 2001
+
+Byte order! (strange!)
+
+Operations:
+
+-- fxRead8(): read a 8-bit byte at byte boundary
+-- fxRead16z(): read a 16-bit word at byte boundary, MSB first (ZIP)
+-- fxRead16(): read a 16-bit word at byte boundary, LSB first (normal)
+-- fxSkip(): skip to next byte boundary
+-- fxRead1(): read 1 bit (for Huffman)
+-- fxRead(): read any amount of bits (0..13), LSB first
+
+
+
+
+
+---
+
+typedef short WORD;
+
+/** reads 0..13 bits */
+WORD fxRead(WORD arg) {
+  global BYTE bufread[42];
+  global UINT pos;
+  global UINT past; /* 0..7: bits of bufread[pos] already read */
+  WORD ret;
+  WORD opast=past;
+  /* Imp: verify unsigned shr! */
+  if (arg!=0) {
+    ret=U_SHR(bufread[pos],opast);
+    past+=arg;
+    if (past==8) {
+      if (pos==sizeof(bufread)-1) pos=0; else pos++;
+      past=0;
+    } else if (past>=9) {
+      if (pos==sizeof(bufread)-1) pos=0; else pos++;
+      ret+=U_SHL(bufread[pos],8-opast);
+      if (past<16) {
+        past-=8;
+      } else {
+        if (pos==sizeof(bufread)-1) pos=0; else pos++;
+        if (past>16) {
+          assert(past<=7+13);
+          ret+=U_SHL(bufread[pos],16-opast);
+        }
+        past-=16;
+      }
+    }
+    ret&=((1<<arg)-1);
+  } else ret=0;
+  return ret;
+}
+
+WORD fxRead1() {
+  global BYTE *bufread;
+  global UINT pos;
+  WORD ret;
+  if (past==7) {
+    ret=1&SHR(bufread[pos],7);
+    past=0; pos++;
+  } else {
+    ret=1&SHR(bufread[pos],past);
+    past++;
+  }
+  return ret;
+}
+
+void fxSkip() {
+  if (past!=0) { pos++; past=0; }
+}
+
+WORD fxRead16() {
+  WORD ret;
+  assert(past==0);
+  ret=bufread[pos]+U_SHL(bufread[pos+1],8);
+  pos+=2; // !!
+  return ret;
+}
+
+WORD fxRead8() {
+  WORD ret;
+  assert(past==0);
+  ret=bufread[pos];
+  pos++; // !!
+  return ret;
+}
+
+WORD fxRead16z() {
+  WORD ret;
+  assert(past==0);
+  ret=bufread[pos+1]+U_SHL(bufread[pos],8);
+  pos+=2; // !!
+  return ret;
+}
+
+---
+
+IO directives:
+
+1. Nothing():
+2. Skip(A,B,C): skip A+B+C input bytes (signed 16-bit...)
+3. Flush(): flush round buffer
+3. Copy(N): copy N bytes from buffer
+
+
+while (true) {
+  ensure_bytes_read(262); /* read '\004' for EOF */
+  directive=work();
+  if (directive==Nothing()) {
+  } else if (directive==S
+
+
+}
+
+
+
+__END__

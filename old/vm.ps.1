@@ -1,0 +1,65 @@
+% vm.ps
+% a simplified OC virtual machine
+% by pts@fazekas.hu at Sat Jul 28 21:11:56 CEST 2001
+% works!! -- Sat Jul 28 22:13:00 CEST 2001
+%
+% Timing: 153250ms user for bash.file
+% Timing:   8240ms user for pts2.pbm
+% Timing:   6790ms user for pts2.pbm, removed `exit's
+%
+
+% pts2.pbm: w=419 h=534 data_offset=34 size=28336
+% pts2.pbm.gz csize=7520
+
+/Ram 48000 array def
+/Codes [
+  (t) run
+] bind def
+/Ip 2 def
+/Stdin (%stdin) (r) file def
+/Stdout (%stdout) (w) file def
+
+Codes ===
+quit
+
+{
+  Codes Ip get exec
+  dup 1 gt { % function call
+    Ram 0 get % save arg to stack
+    Ip 1 add  % save return position to stack
+    % Now: <arg> <faddr> <retarg> <retip>
+    4 2 roll
+    /Ip exch def
+    Ram exch 0 exch put
+    % Now: <retarg> <retip>
+  }{
+    dup -2 lt { % JMP
+      neg
+      /Ip exch def
+    }{
+      /Ip Ip 1 add def
+      dup 0 eq { % getchar()
+        pop pop % forget faddr and arg
+        Stdin read not{-1}if
+      }{
+        dup 1 eq { % putchar()
+          pop % forget faddr
+          Stdout exch write
+          0 % fake retval
+        }{
+          dup -1 eq { % halt
+            exit % _halt_
+          }{ % RET
+            pop % forget ..faddr
+            3 1 roll
+            % Now: <retval> <retarg> <retip>
+            /Ip exch def
+            Ram exch 0 exch put
+            % Now: <retval>
+          } ifelse
+        } ifelse
+      } ifelse
+    } ifelse
+  } ifelse
+} bind loop
+quit

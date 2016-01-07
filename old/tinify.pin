@@ -1,0 +1,70 @@
+% tinify.pin by pts@fazekas.hu at Sat Aug 24 14:27:55 CEST 2002
+
+%<Open>
+save
+%</Open>
+
+%<Abbr acount=26 xcount=40>
+begin
+%</Abbr>
+
+%<A x "load def"/>
+%<A E def/>
+%<A + add/>
+%<A , and/>
+%<A - sub/>
+%<A . lt/>
+%<A : for/>
+%<A ; getinterval/>
+%<A = eq/>
+%<A @ loop/>
+%<A A currentfile/>
+%<A H 32768/>
+%<A J 32767/>
+%<A O pop/>
+%<A X exit/>
+%<A a packedarray/>
+%<A b bitshift/>
+%<A c exch/>
+%<A g get/>
+%<A i ifelse/>
+%<A j if/>
+%<A r read/>
+%<A t put/>
+%<A u dup/>
+%<A y copy/>
+%<A | -1670420001/>
+%<A ~ ne/>
+
+%<TokSubs name=K inlining=0/>
+
+%<Test>
+/S H string E
+19 5 8[1 0 0 -1 0 5]
+/filter where not
+%</Test>
+
+%<S len=32768>
+S
+%</S>
+
+%<True>
+  pop pop pop pop fff
+  %{zzzzzzzzz fW S c 0 c ;}image %% kézi kódrészlet
+%</True>
+
+%<False>
+  pop
+  /T A/ASCII85Decode filter E
+  /F T/RunLengthDecode filter E
+  F image
+  F closefile T closefile
+%</False>
+
+%<Defs>
+{/fff {currentfile 117 string readstring pop pop} def }
+%</Defs>
+
+%<Fini>
+end restore showpage
+%</Fini>

@@ -1,0 +1,377 @@
+/* rewritten by pts@fazekas.hu at Fri Jun 29 23:42:40 CEST 2001
+ * Sat Jun 30 09:49:56 CEST 2001
+ * Imp: eliminate ** from fvNewnode()
+ * Imp: eliminate DWORD
+ * Imp: eliminate malloc(), only static storage
+ * Imp: eliminate pointers (*)
+ * Imp: signed integers
+ *
+ * SUXX: we don't check for CRC
+ * SUXX: we don't validate file
+ * SUXX: we don't check for EOF
+ * SUXX: segfault on invalid file
+ *
+ * OK : add initialization of global variables
+ * OK : convert short, fixed loops to series of instructions
+ * OK : simplify if's
+ * OK : `for' -> `while'
+ * OK : no `for', no `goto', no `break', no `continue'
+ * OK : unobfuscate [] handling
+ * OK : use ++, --, =, += etc. as a standalone instruction, not an operator
+ * OK : separate, named fv*() functions instead of B()
+ * OK : remove commas in favour of semicolons
+ * OK : eliminate operator `?:'
+ * OK : eliminate var `I'
+ * OK : boolean handling is like in Java: comparison and logical operators are
+ *      assumed to return a boolean value (which cannot be converted to/from
+ *      int), `if' and `while' test only boolean, not int.
+ * Dat: no signed integers, just unsigned
+ * Dat: no var `l' anymore
+ * Dat: no var `O' anymore
+ * Dat: global variables: one letter, upper case
+ * Dat: watch out for >> if you use signed integers (e.g Java!)
+ * Dat: no octal and hexadecimal constants in the source
+ */
+
+/* used library functions */
+#define putcha putchar
+#define getcha getchar
+#define mallo  malloc
+#define fre    free
+#include <stdio.h> /* putchar(), getchar() */
+#include <stdlib.h> /* malloc(), free() */
+
+#undef NULL
+#define NULL ((void*)0)
+
+/* used integer types, except for main() */
+#undef BYTE
+#define BYTE unsigned char /* 8 bits */
+#undef WORD
+#define WORD unsigned short /* >=16 bits */
+#undef DWORD
+#define DWORD unsigned long /* >=32 bits; unused */
+
+/* Compiles with: gcc -ansi -pedantic -W -Wall -Wstrict-prototypes -Wtraditional -Wnested-externs -Wpointer-arith -Wbad-function-cast -Wcast-qual -Wmissing-prototypes -Winline -Wmissing-declarations rcm.c */
+
+/* datatype declarations */
+struct node {
+  struct node *left, *right;
+  WORD value;
+};
+
+/* function declarations */
+int main(int argc, char **argv);
+static void fvMain(void);
+static WORD fvDescend(struct node *root);
+static void fvWrite(WORD param);
+static struct node *fvNewnode(WORD param);
+
+/* constant arrays (lookup tables) */
+const WORD constW[] = {16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
+const WORD constU[] = {3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258};
+const WORD constP[] = {0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0};
+const WORD constQ[] = {1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577};
+const WORD constL[] = {0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13};
+
+static WORD C, T;
+
+/**
+ * A buffer of 16 bits for storing bits read but not processed yet. Needed
+ * because we can read only bytes, not bits with getchar(). Was 32 bits,
+ * but could be reduced.
+ * Used by only fvRead().
+ */
+static WORD J;
+/**
+ * The number of bits in the buffer <code>J</code>. Used only in fvRead();
+ */
+static WORD Y;
+
+static WORD Z[320], B[17], G[17];
+static BYTE S[32768];
+static struct node *V, *H;
+
+/**
+ * Reads <code>param</code> bits from input.
+ * @param param number of bits to read
+ * @return WORD, consisting of the bits
+ * @whichcode 1
+ */
+static WORD fvRead(WORD param) {
+  WORD oo, f;
+  if (0!=param) {
+    /* Assert: 0<=Y && Y<=7; */
+    /* Assert: param<=16 */
+    if (Y>7 || param>16) abort();
+    /* vvv Dat: 0L means a long (>=32) bit long zero */
+    #if 0 /* J can hold at least 24 bits */
+      while (Y < param) {
+        J |= (0L + getcha ()) << Y;
+        Y+=8;
+      }
+      Y -= param;
+      if (Y>16) {
+        fprintf(stderr, "%d\n", Y);
+        abort();
+      }
+      oo = J & ((1 << param) - 1);
+      J >>= param;
+      return oo;
+    #else /* J can hold at most 16 bits */
+      while (Y+8 <= param) {
+        J |= (getcha()&255) << Y;
+        Y+=8;
+      }
+      if (Y < param) { /* Y < param < Y+8 */
+        f=getcha()&255;
+        oo = (J | f<<Y) & ((1<<param)-1);
+        J = f >> (param-Y);
+        Y += 8 - param;
+      } else { /* Y >= param */
+        oo = J & ((1 << param) - 1);
+        J >>= param;
+        Y -= param;
+      }
+      return oo;
+    #endif
+  } else return 0;
+}
+
+/** 
+ * Allocates a new node and initializes it with empty content. This function
+ * lets we get rid of the global variable F (which was buggily uninitialized
+ * in the original scm.c).
+ * @return pointer to the newly allocated node
+ * @whichcode -1
+ */
+static struct node *fvNalloc(void) {
+  static struct node empty={ NULL, NULL, 0 };
+  struct node *n;
+  n = mallo (sizeof (struct node));
+  *n=empty;
+  return n;
+}
+
+/**
+ * Frees the Huffman tree originating from <code>root</code> recursively.
+ * Used <code>I</code> as input only.
+ * Moved <code>I</code> into a parameter.
+ */
+static void fvFree(struct node *root) {
+  if (0!=root) {
+    fvFree(root->left);
+    fvFree(root->right);
+    fre(root);
+  }
+}
+
+/**
+ * @whichcode 0, 6
+ */
+static void fvMain(void) {
+  WORD o, q;
+  J=0; Y=0; C=0; T=0;
+  V=NULL; H=NULL;
+  fvRead(8); fvRead(16); /* fvRead(24); */
+  o = fvRead(8);
+  fvRead(8); fvRead(16); /* fvRead(24); */
+  fvRead(8); fvRead(16); /* fvRead(24); */
+  if (0!=(o & 4)) {
+    q=fvRead(16);
+    while (q!=0) { fvRead(8); q--; }
+  }
+  while (0!=(o & 8) && 0!=fvRead(8)) ;
+  while (0!=(o & 16) && 0!=fvRead(8)) ;
+  if (0!=(o & 2)) fvRead(16);
+  o = 0;
+  while (o==0) {
+    o = fvRead(1);
+    q = fvRead(2);
+    if (0!=q) {
+      if (0!=(q & 1)) { /* inline: fv(..., 8); */
+        WORD oo;
+        oo=288;
+        while (oo!=0) {
+          oo--;
+          /* Z[oo] = oo < 144 ? 8
+                : oo < 256 ? 9
+                : oo < 280 ? 7
+                : 8; */
+          if (144<=oo && oo<256) Z[oo]=9;
+          else if (256<=oo && oo<280) Z[oo]=7;
+          else Z[oo]=8;
+        }
+        V=fvNewnode(288);
+        Z[ 0]=5; Z[ 1]=5; Z[ 2]=5; Z[ 3]=5; Z[ 4]=5; Z[ 5]=5; Z[ 6]=5; Z[ 7]=5;
+        Z[ 8]=5; Z[ 9]=5; Z[10]=5; Z[11]=5; Z[12]=5; Z[13]=5; Z[14]=5; Z[15]=5;
+        Z[16]=5; Z[17]=5; Z[18]=5; Z[19]=5; Z[20]=5; Z[21]=5; Z[22]=5; Z[23]=5;
+        Z[24]=5; Z[25]=5; Z[26]=5; Z[27]=5; Z[28]=5; Z[29]=5; Z[30]=5; Z[31]=5;
+        H=fvNewnode(32);
+      }
+      if (0!=(q & 2)) { /* inline: fv(..., 9); */
+        WORD o, oo, ooo, f, q;
+        WORD p = fvRead(5) + 257;
+        WORD z = fvRead(5) + 1;
+        WORD v = fvRead(4) + 4;
+        oo = 0;
+        while (oo < v)  { Z[constW[oo]] = fvRead(3); oo++; }
+        while (19 > oo) { Z[constW[oo]] = 0; oo++; }
+        V=fvNewnode(19);
+        ooo=0;
+        oo=0;
+        while (oo < p + z) {
+          o = fvDescend(V);
+          /* f = o == 16 ? ((o = ooo), 3 + fvRead(2))
+               : o == 17 ? ((o = 0), 3 + fvRead(3))
+               : o == 18 ? ((o = 0), 11 + fvRead(7))
+               : ((ooo = o), 1); */
+          if (o==16) { o=ooo; f=3+fvRead(2); }
+          else if (o==17) { o=0; f=3+fvRead(3); }
+          else if (o==18) { o=0; f=11+fvRead(7); }
+          else { ooo=o; f=1; }
+          q=f;
+          while (q!=0) { Z[oo] = o; oo++; q--; }
+        }
+        fvFree(V);
+        V=fvNewnode(p);
+        oo=z;
+        while (oo!=0) { oo--; Z[oo] = Z[oo + p]; }
+        H=fvNewnode(z);
+      }
+      { /* inline: fv(..., 6); */
+        WORD oo, f;
+        oo=fvDescend(V);
+        while (oo != 256) {
+          if (oo > 256) {
+            oo -= 257;
+            f = constU[oo] + fvRead(constP[oo]);
+            oo = fvDescend(H);
+            oo = constQ[oo] + fvRead(constL[oo]);
+            /* oo = oo <= T ? T - oo : 32768 - oo + T; */
+            if (oo<=T) oo=T-oo;
+                  else oo=32768-oo+T;
+            while (f!=0) {
+              fvWrite(S[oo]);
+              oo++;
+              oo&=32767; /* oo %= 32768; */
+              f--;
+            }
+          } else fvWrite(oo);
+          oo=fvDescend(V);
+        }
+      }
+      fvFree(V);
+      fvFree(H);
+    } else { /* inline: fv(..., 7); */
+    /**
+     * Copies a block of input to output (mostly) verbatim. (This is because
+     * some blocks cannot be effectively compressed, so gzip has inserted them as
+     * is.)
+     * @whichcode 7
+     */
+      WORD oo;
+      fvRead(Y&7 /* Y % 8*/);
+      oo=fvRead(16); /* length of block */
+      fvRead(16); /* checksum??; ignored */
+      while (oo!=0) { fvWrite(fvRead(8)); oo--; }
+    }
+  }
+  T&=32767; C&=32767; /* T%=32768; C%=32768; */
+  while (C!=T) {
+    putcha(S[C]);
+    C++;
+    C&=32767; /* C%=32768; */
+  }
+}
+
+/**
+ * Goes down (descends) enough levels in the binary tree of (struct node)s.
+ * Reads numbers from input encoded as a Huffman tree represented by the
+ * (struct node)s.
+ * Called only from 2 places.
+ * Used <code>I</code> as both input and output, but the output is never used in the
+ * program. So I've put <code>I</code> to a parameter.
+ * @param root is only for input
+ * @whichcode 3
+ */
+static WORD fvDescend(struct node *root) {
+  while (root->left) {
+    if (0!=fvRead(1)) root=root->right; else root=root->left;
+  }
+  return root->value;
+}
+
+/**
+ * Allocates new (struct node)s. Very probably this is the Huffman tree
+ * builder.
+ * Used <code>I</code> as output only, so I moved it to the return value.
+ * @return the root of the Huffman tree just built
+ * @whichcode 5
+ */
+static struct node *fvNewnode(WORD param) {
+  WORD oo, q;
+  struct node *anode;
+  B[0]=0; B[1]=0; B[2]=0; B[3]=0; B[4]=0; B[5]=0; B[6]=0; B[7]=0; B[8]=0;
+  B[9]=0; B[10]=0; B[11]=0; B[12]=0; B[13]=0; B[14]=0; B[15]=0; B[16]=0;
+  oo=0;
+  while (oo < param) { B[Z[oo]]++ /* !! */; oo++; }
+  B[0]=0;
+  G[0]=0;
+  /*
+  oo=0;
+  while (oo < 16) {
+    G[oo + 1] = (G[oo] + B[oo]) << 1;
+    oo++;
+  }
+  */
+  G[ 1] = (G[ 0]+B[ 0])<<1; G[ 2] = (G[ 1]+B[ 1])<<1;
+  G[ 3] = (G[ 2]+B[ 2])<<1; G[ 4] = (G[ 3]+B[ 3])<<1;
+  G[ 5] = (G[ 4]+B[ 4])<<1; G[ 6] = (G[ 5]+B[ 5])<<1;
+  G[ 7] = (G[ 6]+B[ 6])<<1; G[ 8] = (G[ 7]+B[ 7])<<1;
+  G[ 9] = (G[ 8]+B[ 8])<<1; G[10] = (G[ 9]+B[ 9])<<1;
+  G[11] = (G[10]+B[10])<<1; G[12] = (G[11]+B[11])<<1;
+  G[13] = (G[12]+B[12])<<1; G[14] = (G[13]+B[13])<<1;
+  G[15] = (G[14]+B[14])<<1; G[16] = (G[15]+B[15])<<1;
+  anode=NULL;
+  oo=0;
+  while (oo < param) {
+    if (0!=Z[oo]) {
+      struct node **e;
+      WORD o;
+      q = G[Z[oo]];
+      G[Z[oo]]++;
+      e=&anode;
+      o = Z[oo];
+      while (o!=0) {
+        o--;
+        if (*e==NULL) *e=fvNalloc();
+        if (0!=((q>>o)&1)) e=&(*e)->right; else e=&(*e)->left;
+      }
+      *e=fvNalloc();
+      (*e)->value = oo;
+    }
+    oo++;
+  }
+  return anode;
+}
+
+/**
+ * Writes out a character if available.
+ * @whichcode 2
+ */
+static void fvWrite(WORD param) {
+  S[T] = param;
+  T++;
+  T&=32767; C&=32767; /* T%=32768; C%=32768; */
+  if (T==C) { putcha(S[C]); C++; }
+}
+
+int main(int argc, char **argv) {
+  (void)argc;
+  (void)argv;
+  /* fprintf(stderr,"%p\n", F.left); */
+  /* F.left=&F; */
+  fvMain();
+  return 0;
+}

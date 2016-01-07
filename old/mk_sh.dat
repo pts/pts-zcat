@@ -1,0 +1,54 @@
+#! /bin/bash --
+#
+# by pts@fazekas.hu at Sun Mar 17 12:28:12 CET 2002
+#
+CPPFLAGS="-DCFG_FMT_ZLIB_ONLY=1 -DCFG_A85D=1 -DNDEBUG=1 -Dgetinterval=; -DCFG_NO_VAR_S=1"
+
+# <statecat.psm cpp $CPPFLAGS >ta
+
+set -ex
+
+<statecat.psm cpp $CPPFLAGS |
+perl -ne's@/\s+(?=\w)@/@g;print if!/^#/&&!/^\s*$/' |
+perl -x ./pscompress.pl >statecat.ps
+
+<statecat.ps perl -ne's@-1670420001\b@|@g; s@fvWork@fW@g; die unless s@(/cW.*?}E})TokBind exec@print$1@e' >unc.dat
+
+echo '
+{
+8999 string % Imp: use 32768 buffer
+0
+{ % Stack: <dst-str> <i>
+  currentfile read pop
+  dup 10 eq{pop pop exit}if
+  % Stack: <dst-str> <i> <char-read>
+  dup 39 lt{
+    31 sub
+    % Stack: <dst-str> <i> <repeat-count>
+    3 copy getinterval
+    % Stack: <dst-str> <i> <repeat-count> <sub-dst-str>
+    currentfile exch readstring pop pop
+    % Stack: <dst-str> <i> <repeat-count>
+    add 1 add
+  }{
+    3 copy put
+    pop 2 add % \0 as space
+  }ifelse
+  % Stack: <dst-str> <new-i>
+}loop
+print
+}bind exec' | perl ./pscompress.pl >co.dat
+
+<unc.dat perl -e '
+  $_=join"",<STDIN>; s@/@ /@g; die if y@!"#$%&@\x27\x27\x27\x27\x27\x27@;
+  s@([^\(\)\{\}\[\]\s]{2,})@
+    if (length($X=$1)>7) { print STDERR ">> $1\n"; $X=substr($1,0,7) }
+    # printf STDERR "($X)\n";
+    chr(length($X)+31).$X
+  @ge;
+  s@\s+@@g; print"\n\%      $_\n"' >>co.dat
+
+gs -dBATCH -dNODISPLAY -q co.dat >co_out.dat
+
+echo 'Now co.dat should be hand-inserted into test_statecat3_eps.eps.
+And edit manually after...'

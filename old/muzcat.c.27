@@ -1,0 +1,1824 @@
+/* muzcat.c -- a portable and minimalistic zcat (gzip -cd) implementation
+ * originally rcm.c
+ * original author: Ron McFarland <rcm@one.net>, 1996
+ * rewritten, restructured and extended by pts@fazekas.hu at
+ * Fri Jun 29 23:42:40 CEST 2001
+ * Sat Jun 30 09:49:56 CEST 2001
+ * Sat Jun 30 16:01:11 CEST 2001 C, Java
+ * Sat Jul 21 10:43:19 CEST 2001
+ * Sat Jul 21 16:16:45 CEST 2001 CFG_LANG_OC, timings
+ * Tue Jul 24 20:59:35 CEST 2001 CFG_LANG_KNRC, CFG_LANG_PERL
+ * Thu Jul 26 12:14:40 CEST 2001 added CFG_INPUT_*, CFG_MULTIPLE
+ * Fri Jul 27 22:20:21 CEST 2001 cleanups, comments, CFG_LANG_ANSIC_SYSCALL, CFG_LANG_ANSIC_LINUX
+ * Sat Jul 28 13:25:38 CEST 2001 WHILE etc, CFG_LANG_RUBY, CFG_LANG_PYTHON, muzcat3.ps
+ *
+ * SUXX: we don't check for CRC
+ * SUXX: we don't validate file
+ * SUXX: we don't check for EOF
+ * SUXX: may segfault on invalid file
+ *
+ * Imp: is NODESIZE large enough??
+ * Imp: write error-tolelarant, partial zip decompressor
+ * OK : Linux kernel version
+ * Imp: PHP
+ * OK : multiple ZIP files (Thu Jul 26 19:25:22 CEST 2001)
+ * OK : STORED for ZIP files (Thu Jul 26 19:06:28 CEST 2001)
+ * OK : Perl (before Thu Jul 26 10:55:57 CEST 2001)
+ * OK : eliminate malloc(), only static storage in var `N'
+ * OK : eliminate pointers (`*')
+ * OK : works if WORD can hold a 16 bit signed integer
+ * OK : works with WORD defined as either `signed short' or `unsigned short'
+ *      The problems with %, / and >> have been solved. This means that
+ *      it should be easy to port to PostScript.
+ * OK : works with BYTE defined as either `signed char'  or `unsigned char'
+ * OK : eliminate DWORDs (32 bit integers)
+ * OK : add initialization of global variables
+ * OK : convert short, fixed loops to series of instructions
+ * OK : simplify if's
+ * OK : `for' -> `while'
+ *      This means that it should be easy to port to Ruby.
+ * OK : no `for', no `goto', no `break', no `continue'
+ * OK : unobfuscate [] handling
+ * OK : use ++, --, =, += etc. as a standalone instruction, not an operator.
+ *      This means that it should be easy to port to Python.
+ * OK : separate, named fv*() functions instead of B()
+ * OK : remove commas in favour of semicolons
+ * OK : eliminate operator `?:'
+ * OK : eliminate var `I'
+ * OK : boolean handling is like in Java: comparison and logical operators are
+ *      assumed to return a boolean value (which cannot be converted to/from
+ *      int), `if' and `while' test only boolean, not int.
+ * OK : eliminate logical operators: `&&', '||'
+ * OK : runs fine with checkergcc, even in OC mode
+ * Dat: no signed integers, just unsigned
+ * Dat: no var `l' anymore
+ * Dat: no var `O' anymore
+ * Dat: global variables: one letter, upper case
+ * Dat: no octal and hexadecimal constants in the source
+ * Dat: no multiplication or division, just bit shifts
+ * Dat: compiles with: gcc -s -O3 -ansi -pedantic -W -Wall -Wstrict-prototypes -Wtraditional -Wnested-externs -Wpointer-arith -Wbad-function-cast -Wcast-qual -Wmissing-prototypes -Winline -Wmissing-declarations rcm.c
+ * Dat: dependency of functions:
+ *	# `f g' means: g calls f.
+ *	fvMain main
+ *	fvRead fvMain
+ *	fvMktree fvMain
+ *	fvDescend fvMain
+ *	fvFree fvMain
+ *	fvWrite fvMain
+ *	fvRead fvDescend
+ *	fvNalloc fvMktree
+ * Dat: functions are listed avoiding forward dependency
+ * Dat: no initialized var decls: `int a=42;'
+ * Dat: no inner var decls: `if (1) { int a; }'
+ * Dat: no multiple var decls: `int a, b;'
+ * Dat: function local (i.e automatic) var decls are prefixed by LOCAL_VAR
+ * Dat: bodies for while() and if() are all {}-ed
+ * Dat: while and if bodies are in seperate line
+ * Dat: RETURN is the last instruction of the functions
+ */
+
+/* The user can effect the compilation by #defining a couple of control
+ * macros.
+ *
+ * To choose the language, #define _one_ of the following:
+ *
+ * #define CFG_LANG_JAVA 1
+ * #define CFG_LANG_OC 1
+ * #define CFG_LANG_ANSIC_SIGNED 1
+ * #define CFG_LANG_PERL 1
+ * #define CFG_LANG_KNRC 1
+ * #define CFG_LANG_ANSIC 1
+ *
+ * To affect how input is treated, #define _one_ of the following:
+ *
+ * #define CFG_INPUT_RAW  1  -- raw, RFC 1951
+ * #define CFG_INPUT_FILE 1  -- autodetect: gzip or RFC 1950 or ZIP
+ * #define CFG_INPUT_RFC  1  -- autodetect: RFC 1952 or RFC 1950 or ZIP
+ *
+ * Please use CFG_INPUT_FILE instead of CFG_INPUT_RFC, so it will be
+ * compatible with existing utilities.
+ *
+ * To affect how multiple files are treated, do _one_ of the following:
+ *
+ * #define CFG_MULTIPLE 1    -- concatenate multiple input files
+ * #undef  CFG_MULTIPLE      -- stop after first input file
+ *
+ * Note that reading after the first ZIP file is not supported.
+ */
+
+#ifdef MUZCAT_NO_DEFAULT
+#else
+#define CFG_INPUT_FILE 1
+#define CFG_MULTIPLE 1
+#endif
+
+/* Imp: #undef more */
+#undef my_getchar
+#undef my_putchar
+#undef BYTE
+#undef WORD
+#undef ENDDOT
+#undef ARRAY
+#undef SHR
+#undef SHL
+#undef ADD
+#undef SUB
+#undef HAVE_ARRAY_INIT
+#undef DEFUN_0
+#undef DEFUN_1
+#undef ARY
+#undef YRA
+#undef GLOBAL_INIT_ARRAY
+#undef GLOBAL_ARRAY
+#undef AREF
+#undef GLOBAL_VAR
+#undef LOCAL_VAR
+#undef ENDDOT2
+#undef SMALLEST_CODE
+#undef RETURN_FORCE_VOID
+#undef IF
+#undef ELSE
+#undef ELSE_IF
+#undef ENDIF
+#undef WHILE
+#undef ENDWHILE
+#undef ENDFUN
+#undef PASS
+#undef GLOBAL_REF
+#undef AFTER_GLOBALS
+#define AFTER_GLOBALS
+#undef ALLOW_LOCALS
+#undef RETURN
+
+#if CFG_LANG_JAVA
+  /* Any javac and JVM will suffice, JRE >=1.1 is required.
+   *
+   * .class file size: 5076 bytes
+   * Test Bash:    5590ms user
+   * Test Random:  1440ms user
+   * Test Misc:    6490ms user
+   *
+   */
+  #define RETURN(fname,value) return value;
+  /* ^^^ auto `;' */
+  #define ALLOW_LOCALS 1
+  #define GLOBAL_REF(varname)
+  #define PASS
+  #define ENDFUN }
+  #define IF(c) if (c) {
+  #define ELSE_IF(c) } else if (c) {
+  #define ELSE } else {
+  #define ENDIF }
+  #define WHILE(c) while (c) {
+  #define ENDWHILE }
+  #undef SMALLEST_CODE /* do not optimize for smallest code size */
+  #define ENDDOT2
+  #define AREF(aname,idx) aname[idx]
+  #define GLOBAL_INIT_ARRAY(type,name) static CONST type name[]
+  #define ARY {
+  #define YRA }
+  #define DEFUN_0(rtype,name) static protected rtype name() {
+  #define DEFUN_1(rtype,name,atype) static protected rtype name(atype arg) {
+  #define BYTE int
+  #define WORD int
+  #define CONST final
+  #define GLOBAL_VAR(type,name) static protected type name
+  #define LOCAL_VAR(type,name) type name
+  #define ENDDOT }
+  #define VOID void
+  #define RETURN_VOID
+  #define RETURN_FORCE_VOID return
+  #define GLOBAL_ARRAY(type,name,length) static type name[]=new type[length]
+  #define HAVE_ARRAY_INIT 1
+  #define SHL(a,b) ((a)<<(b))
+  /* ^^^ SHL(a,b): Precondition: 0<=b && b<=15 */
+  #define SHR(a,b) ((a)>>(b)) /* even >>> works OK */
+  /* ^^^ SHR(a,b): Precondition: 0<=b && b<=14 (!!) */
+  #define ADD(r,a) r+=(a) /* stupid Java, disallows extra parens */
+  #define SUB(r,a) r-=(a)
+  #define SLIDE(r) r++; r&=32767 /* stupid Java, disallows extra parens */
+  /* ^^^ SLIDE(r): increments the var `r', modulo 32768. Precondition:
+   *     0<=r<32768. Postcondition: 0<=r<32768.
+   */
+  #define TAND_1(a) (0!=((a)&1))
+  /* ^^^ TAND_1(a) is true iff a is odd */
+  #define TAND_P(a,p) (0!=((a)&(p)))
+  /* ^^^ TAND_P(a,p) is true iff 0!=(a&p). Precondition: p must be a power
+   *     of two (!), such as: 1, 2, 4, 8, 16.
+   */
+  #define TNAND_P(a,p) (0==((a)&(p)))
+  #define AND_255(a) ((a)&255)
+  #define AND_7(a) ((a)&7)
+  #define AND_LOW(a,b) ((a)&((1<<(b))-1))
+  #define TWICE(a) ((a)<<1)
+  #define INCR(r) r++ /* stupid Java, disallows extra parens */
+  #define DECR(r) r-- /* stupid Java, disallows extra parens */
+  #if 0 /* unused */
+    #define LAND(a,b) ((a) && (b))
+    /* ^^^ returns true (testable by `if') iff both `a' and `b' are true */
+  #endif
+  import java.io.IOException;
+  public class ZCat {
+    public static void main(String[] args) {
+      fvMain();
+      System.out.flush();
+    }
+    public static WORD my_getchar() {
+      try {
+        int i=System.in.read();
+        if (i<0) System.exit(2);
+        return (WORD)(i&255);
+      } catch (IOException e) {
+        System.exit(3);
+      }
+      return 0;
+    }
+    public static void my_putchar(WORD b) {
+      /* try { */
+        System.out.write((byte)b);
+      /* } catch (IOException e) {} */
+    }
+#elif CFG_LANG_OC
+  /* This works since Sat Jul 21 15:57:03 CEST 2001.
+   *
+   * OC (Obfuscated C) is a simplistic, C-like programming language invented
+   * and implemented by Lennart Augustsson <augustss@carlstedt.se>. OC's most
+   * remarkable property is that the overall size of OC runtime environment
+   * and the OC compiler is less than 3400 bytes (!!) (measuring the C
+   * source code).
+   *
+   * You can dowload OC from http://www.ioccc.org. Search for the 1996 contest
+   * entries, and download `august' (Lennart Augostsson's entry).
+   * august.c and august.txt is shipped with muzcat.c for your convenience.
+   *
+   * OC bytecode size: 4872 bytes (should be hard to reduce to 4000)
+   * Required memory: 48000 bytes (august.c compiled with -DZ=48000)
+   * Test Bash:   22720ms user
+   * Test Random:  3250ms user
+   * Test Misc:   20900ms user
+   *
+   * Special care was taken to make this program work in OC because OC has a
+   * rather minimal instruction set (see below), and both the runtime
+   * environment and the compile impose limitations on code size and memory
+   * usage.
+   */
+  /* code OK: int main() { int a; (a)=(65); putchar((a)); } */
+  /* code OK: void main(void) { int a; (a)=(65); putchar((a)); } */
+  /* OK : functions may have at most 16 local variables!! */
+  /* OK : no += etc.; but ++ and -- is allowed (see parse.oc, fac.oc) */
+  /* OK : no bitwise operations: `&', `|', `^', `~' */
+  /* OK : no logical operators: `&&', '||' */
+  /* OK : no bit shift operators; `<<', '>>' */
+  /* OK : no array initializers */
+  /* OK : no initialized var decls: `int a=42;' */
+  /* OK : no inner var decls; `if (1) { int a; }' */
+  /* OK : no argc, argv in main */
+  /* OK : ensure powtwo[16] unused */
+  /* OK : function return types cannot be void */
+  /* OK : bytecode size reduced <5000, so it compiles with august.c */
+  /* OK : variable names must be /[a-z]+/ */
+  /* Imp: eliminate 32768 */
+  /* OK : no comparison operators `>', `>=', `<=' */
+  /* #define AFTER_GLOBALS int dummy; */
+  /* Dat: memory requirement: 35278 words */
+  #define RETURN(fname,value) return value;
+  #define ALLOW_LOCALS 0
+  #define GLOBAL_REF(varname)
+  #define PASS
+  #define ENDFUN }
+  #define IF(c) if (c) {
+  #define ELSE_IF(c) } else if (c) {
+  #define ELSE } else {
+  #define ENDIF }
+  #define WHILE(c) while (c) {
+  #define ENDWHILE }
+  #define SMALLEST_CODE 1 /* optimize for smallest code size, so <5000 */
+  #define ENDDOT2 enddot2
+  #undef GLOBAL_INIT_ARRAY /* N/A */
+  #define AREF(aname,idx) aname[idx]
+  #define ARY {
+  #define YRA }
+  #define DEFUN_0(rtype,name) rtype name() {
+  #define DEFUN_1(rtype,name,atype) rtype name(atype arg) {
+  #define BYTE char
+  #define WORD int
+  #define GLOBAL_VAR(type,name) type name
+  #define LOCAL_VAR(type,name) type name
+  #define CONST
+  #define my_putchar putchar
+  #define my_getchar getchar
+  #define VOID int
+  #define RETURN_VOID return 0 /* might have been omitted... */
+  #define RETURN_FORCE_VOID return 0
+  #define GLOBAL_ARRAY(type,name,length) type name[length]
+  #define HAVE_ARRAY_INIT 0
+  #define SHL(a,b) ((a)*powtwo[b])
+  #define SHR(a,b) ((a)/powtwo[b])
+  #define ADD(r,a) ((r)=(r)+(a))
+  #define SUB(r,a) ((r)=(r)-(a))
+  #define SLIDE(r) if (r==32767) r=0; else INCR(r)
+  #define TAND_1(a) (0!=((a)%2))
+  #define TAND_P(a,p) (0!=((a)/(p)%2))
+  #define TNAND_P(a,p) (0==((a)/(p)%2))
+  #define AND_255(a) ((a)%256)
+  #define AND_7(a) ((a)%8)
+  #define AND_LOW(a,b) ((a)%powtwo[b])
+  #define TWICE(a) ((a)*2)
+  #if 1 /* works! */
+    #define INCR(r) ((r)++)
+    #define DECR(r) ((r)--)
+  #else
+    #define INCR(r) ((r)=(r)+1)
+    #define DECR(r) ((r)=(r)-1)
+  #endif
+  
+  #define N n
+  #define D d
+  #define T t
+  #define C c
+  #define J j
+  #define Y y
+  #define Z z
+  #define B b
+  #define G g
+  #define S s
+  #define constW cw
+  #define constU cu
+  #define constP cp
+  #define constQ cq
+  #define constL cl
+  #define fvMain fvmain
+  #define fvNalloc fvnalloc
+  #define fvFree fvfree
+  #define fvDescend fvdescend
+  #define fvWrite fvwrite
+  #define fvMktree fvmktree
+  #define fvRead fvread
+  WORD powtwo[16];
+  /* void ocinit(NO_ARGS) { */
+  /* } */
+  int io; /* global var defined early for main() */
+  int iq; /* global var defined early for main() */
+  #define ENDDOT \
+    int main() { \
+      /* dummy; */ \
+      /* powtwo[0)=1; powtwo[1)=2; powtwo[2)=4; powtwo[3)=8; powtwo[4)=16; powtwo[5)=32; \
+      powtwo[6)=64; powtwo[7)=128; powtwo[8)=256; powtwo[9)=512; powtwo[10)=1024; \
+      powtwo[11)=2048; powtwo[12)=4096; powtwo[13)=8192; powtwo[14)=16384; \
+      powtwo[15)=32768; */ \
+      /* powtwo[16)=65536; */ \
+      /* AREF(constQ,0)=1; AREF(constQ,1)=2; AREF(constQ,2)=3; AREF(constQ,3)=4; AREF(constQ,4)=5; AREF(constQ,5)=7; AREF(constQ,6)=9; AREF(constQ,7)=13; AREF(constQ,8)=17; AREF(constQ,9)=25; AREF(constQ,10)=33; AREF(constQ,11)=49; AREF(constQ,12)=65; AREF(constQ,13)=97; AREF(constQ,14)=129; AREF(constQ,15)=193; AREF(constQ,16)=257; AREF(constQ,17)=385; AREF(constQ,18)=513; AREF(constQ,19)=769; AREF(constQ,20)=1025; AREF(constQ,21)=1537; AREF(constQ,22)=2049; AREF(constQ,23)=3073; AREF(constQ,24)=4097; AREF(constQ,25)=6145; AREF(constQ,26)=8193; AREF(constQ,27)=12289; AREF(constQ,28)=16385; AREF(constQ,29)=24577; */ \
+      io=1; iq=0; while (iq<30) { AREF(constQ,iq)=io+1; INCR(iq); AREF(constQ,iq)=io*3/2+1; INCR(iq); io=io*2; } \
+      AREF(constQ,0)=1; \
+      io=1; iq=0; while (iq<16) { AREF(powtwo,iq)=io; INCR(iq); io=io*2; } \
+      iq=0; while (iq<30) { AREF(constL,iq)=iq/2-1; INCR(iq); } /* used bool as int */ \
+      AREF(constL,0)=0; AREF(constL,1)=0; \
+      /* AREF(constL,0)=0; AREF(constL,1)=0; AREF(constL,2)=0; AREF(constL,3)=0; AREF(constL,4)=1; AREF(constL,5)=1; AREF(constL,6)=2; AREF(constL,7)=2; AREF(constL,8)=3; AREF(constL,9)=3; AREF(constL,10)=4; AREF(constL,11)=4; AREF(constL,12)=5; AREF(constL,13)=5; AREF(constL,14)=6; AREF(constL,15)=6; AREF(constL,16)=7; AREF(constL,17)=7; AREF(constL,18)=8; AREF(constL,19)=8; AREF(constL,20)=9; AREF(constL,21)=9; AREF(constL,22)=10; AREF(constL,23)=10; AREF(constL,24)=11; AREF(constL,25)=11; AREF(constL,26)=12; AREF(constL,27)=12; AREF(constL,28)=13; AREF(constL,29)=13; */ \
+      AREF(constU,0)=3; AREF(constU,1)=4; AREF(constU,2)=5; AREF(constU,3)=6; AREF(constU,4)=7; AREF(constU,5)=8; AREF(constU,6)=9; AREF(constU,7)=10; AREF(constU,8)=11; AREF(constU,9)=13; AREF(constU,10)=15; AREF(constU,11)=17; AREF(constU,12)=19; AREF(constU,13)=23; AREF(constU,14)=27; AREF(constU,15)=31; AREF(constU,16)=35; AREF(constU,17)=43; AREF(constU,18)=51; AREF(constU,19)=59; AREF(constU,20)=67; AREF(constU,21)=83; AREF(constU,22)=99; AREF(constU,23)=115; AREF(constU,24)=131; AREF(constU,25)=163; AREF(constU,26)=195; AREF(constU,27)=227; AREF(constU,28)=258; \
+      AREF(constW,0)=16; AREF(constW,1)=17; AREF(constW,2)=18; AREF(constW,3)=0; AREF(constW,4)=8; AREF(constW,5)=7; AREF(constW,6)=9; AREF(constW,7)=6; AREF(constW,8)=10; AREF(constW,9)=5; AREF(constW,10)=11; AREF(constW,11)=4; AREF(constW,12)=12; AREF(constW,13)=3; AREF(constW,14)=13; AREF(constW,15)=2; AREF(constW,16)=14; AREF(constW,17)=1; AREF(constW,18)=15; \
+      iq=0; io=0; while (iq<28) { if (iq==4) io=1; AREF(constP,iq)=iq/4-io; INCR(iq); } /* used bool as int */ \
+      AREF(constP,28)=0; \
+      /* AREF(constP,0)=0; AREF(constP,1)=0; AREF(constP,2)=0; AREF(constP,3)=0; AREF(constP,4)=0; AREF(constP,5)=0; AREF(constP,6)=0; AREF(constP,7)=0; AREF(constP,8)=1; AREF(constP,9)=1; AREF(constP,10)=1; AREF(constP,11)=1; AREF(constP,12)=2; AREF(constP,13)=2; AREF(constP,14)=2; AREF(constP,15)=2; AREF(constP,16)=3; AREF(constP,17)=3; AREF(constP,18)=3; AREF(constP,19)=3; AREF(constP,20)=4; AREF(constP,21)=4; AREF(constP,22)=4; AREF(constP,23)=4; AREF(constP,24)=5; AREF(constP,25)=5; AREF(constP,26)=5; AREF(constP,27)=5; AREF(constP,28)=0; */ \
+      fvMain(); \
+      return 0; }
+#elif CFG_LANG_OCPS
+  /* This works since Sun Jul 29 11:28:43 CEST 2001
+   *
+   * We use OC to compile to PostScript, see compile_ps1.sh.
+   */
+  #define RETURN(fname,value) return value;
+  #define ALLOW_LOCALS 0
+  #define GLOBAL_REF(varname)
+  #define PASS
+  #define ENDFUN }
+  #define IF(c) if (c) {
+  #define ELSE_IF(c) } else if (c) {
+  #define ELSE } else {
+  #define ENDIF }
+  #define WHILE(c) while (c) {
+  #define ENDWHILE }
+  #define SMALLEST_CODE 1 /* optimize for smallest code size, so <5000 */
+  #define ENDDOT2 enddot2
+  #undef GLOBAL_INIT_ARRAY /* N/A */
+  #define AREF(aname,idx) aname[idx]
+  #define ARY {
+  #define YRA }
+  #define DEFUN_0(rtype,name) rtype name() {
+  #define DEFUN_1(rtype,name,atype) rtype name(atype arg) {
+  #define BYTE char
+  #define WORD int
+  #define GLOBAL_VAR(type,name) type name
+  #define LOCAL_VAR(type,name) type name
+  #define CONST
+  #define my_putchar putchar
+  #define my_getchar getchar
+  #define VOID int
+  #define RETURN_VOID return 0 /* might have been omitted... */
+  #define RETURN_FORCE_VOID return 0
+  #define GLOBAL_ARRAY(type,name,length) type name[length]
+  #define HAVE_ARRAY_INIT 0
+  #define SHL(a,b) ((a)*powtwo[b])
+  #define SHR(a,b) ((a)/powtwo[b])
+  #define ADD(r,a) ((r)=(r)+(a))
+  #define SUB(r,a) ((r)=(r)-(a))
+  #define SLIDE(r) if (r==32767) r=0; else INCR(r)
+  #define TAND_1(a) (0!=((a)%2))
+  #define TAND_P(a,p) (0!=((a)/(p)%2))
+  #define TNAND_P(a,p) (0==((a)/(p)%2))
+  #define AND_255(a) ((a)%256)
+  #define AND_7(a) ((a)%8)
+  #define AND_LOW(a,b) ((a)%powtwo[b])
+  #define TWICE(a) ((a)*2)
+  #if 1 /* works! */
+    #define INCR(r) ((r)++)
+    #define DECR(r) ((r)--)
+  #else
+    #define INCR(r) ((r)=(r)+1)
+    #define DECR(r) ((r)=(r)-1)
+  #endif
+  
+  #define N n
+  #define D d
+  #define T t
+  #define C c
+  #define J j
+  #define Y y
+  #define Z z
+  #define B b
+  #define G g
+  #define S s
+  #define constW cw
+  #define constU cu
+  #define constP cp
+  #define constQ cq
+  #define constL cl
+  #define fvMain fvmain
+  #define fvNalloc fvnalloc
+  #define fvFree fvfree
+  #define fvDescend fvdescend
+  #define fvWrite fvwrite
+  #define fvMktree fvmktree
+  #define fvRead fvread
+  WORD powtwo[16];
+  /* void ocinit(NO_ARGS) { */
+  /* } */
+  int io; /* global var defined early for main() */
+  int iq; /* global var defined early for main() */
+  #define ENDDOT \
+    int main() { \
+      /* dummy; */ \
+      /* powtwo[0)=1; powtwo[1)=2; powtwo[2)=4; powtwo[3)=8; powtwo[4)=16; powtwo[5)=32; \
+      powtwo[6)=64; powtwo[7)=128; powtwo[8)=256; powtwo[9)=512; powtwo[10)=1024; \
+      powtwo[11)=2048; powtwo[12)=4096; powtwo[13)=8192; powtwo[14)=16384; \
+      powtwo[15)=32768; */ \
+      /* powtwo[16)=65536; */ \
+      /* AREF(constQ,0)=1; AREF(constQ,1)=2; AREF(constQ,2)=3; AREF(constQ,3)=4; AREF(constQ,4)=5; AREF(constQ,5)=7; AREF(constQ,6)=9; AREF(constQ,7)=13; AREF(constQ,8)=17; AREF(constQ,9)=25; AREF(constQ,10)=33; AREF(constQ,11)=49; AREF(constQ,12)=65; AREF(constQ,13)=97; AREF(constQ,14)=129; AREF(constQ,15)=193; AREF(constQ,16)=257; AREF(constQ,17)=385; AREF(constQ,18)=513; AREF(constQ,19)=769; AREF(constQ,20)=1025; AREF(constQ,21)=1537; AREF(constQ,22)=2049; AREF(constQ,23)=3073; AREF(constQ,24)=4097; AREF(constQ,25)=6145; AREF(constQ,26)=8193; AREF(constQ,27)=12289; AREF(constQ,28)=16385; AREF(constQ,29)=24577; */ \
+      io=1; iq=0; while (iq<30) { AREF(constQ,iq)=io+1; INCR(iq); AREF(constQ,iq)=io*3/2+1; INCR(iq); io=io*2; } \
+      AREF(constQ,0)=1; \
+      io=1; iq=0; while (iq<16) { AREF(powtwo,iq)=io; INCR(iq); io=io*2; } \
+      iq=0; while (iq<30) { AREF(constL,iq)=iq/2-1; INCR(iq); } /* used bool as int */ \
+      AREF(constL,0)=0; AREF(constL,1)=0; \
+      /* AREF(constL,0)=0; AREF(constL,1)=0; AREF(constL,2)=0; AREF(constL,3)=0; AREF(constL,4)=1; AREF(constL,5)=1; AREF(constL,6)=2; AREF(constL,7)=2; AREF(constL,8)=3; AREF(constL,9)=3; AREF(constL,10)=4; AREF(constL,11)=4; AREF(constL,12)=5; AREF(constL,13)=5; AREF(constL,14)=6; AREF(constL,15)=6; AREF(constL,16)=7; AREF(constL,17)=7; AREF(constL,18)=8; AREF(constL,19)=8; AREF(constL,20)=9; AREF(constL,21)=9; AREF(constL,22)=10; AREF(constL,23)=10; AREF(constL,24)=11; AREF(constL,25)=11; AREF(constL,26)=12; AREF(constL,27)=12; AREF(constL,28)=13; AREF(constL,29)=13; */ \
+      AREF(constU,0)=3; AREF(constU,1)=4; AREF(constU,2)=5; AREF(constU,3)=6; AREF(constU,4)=7; AREF(constU,5)=8; AREF(constU,6)=9; AREF(constU,7)=10; AREF(constU,8)=11; AREF(constU,9)=13; AREF(constU,10)=15; AREF(constU,11)=17; AREF(constU,12)=19; AREF(constU,13)=23; AREF(constU,14)=27; AREF(constU,15)=31; AREF(constU,16)=35; AREF(constU,17)=43; AREF(constU,18)=51; AREF(constU,19)=59; AREF(constU,20)=67; AREF(constU,21)=83; AREF(constU,22)=99; AREF(constU,23)=115; AREF(constU,24)=131; AREF(constU,25)=163; AREF(constU,26)=195; AREF(constU,27)=227; AREF(constU,28)=258; \
+      AREF(constW,0)=16; AREF(constW,1)=17; AREF(constW,2)=18; AREF(constW,3)=0; AREF(constW,4)=8; AREF(constW,5)=7; AREF(constW,6)=9; AREF(constW,7)=6; AREF(constW,8)=10; AREF(constW,9)=5; AREF(constW,10)=11; AREF(constW,11)=4; AREF(constW,12)=12; AREF(constW,13)=3; AREF(constW,14)=13; AREF(constW,15)=2; AREF(constW,16)=14; AREF(constW,17)=1; AREF(constW,18)=15; \
+      iq=0; io=0; while (iq<28) { if (iq==4) io=1; AREF(constP,iq)=iq/4-io; INCR(iq); } /* used bool as int */ \
+      AREF(constP,28)=0; \
+      /* AREF(constP,0)=0; AREF(constP,1)=0; AREF(constP,2)=0; AREF(constP,3)=0; AREF(constP,4)=0; AREF(constP,5)=0; AREF(constP,6)=0; AREF(constP,7)=0; AREF(constP,8)=1; AREF(constP,9)=1; AREF(constP,10)=1; AREF(constP,11)=1; AREF(constP,12)=2; AREF(constP,13)=2; AREF(constP,14)=2; AREF(constP,15)=2; AREF(constP,16)=3; AREF(constP,17)=3; AREF(constP,18)=3; AREF(constP,19)=3; AREF(constP,20)=4; AREF(constP,21)=4; AREF(constP,22)=4; AREF(constP,23)=4; AREF(constP,24)=5; AREF(constP,25)=5; AREF(constP,26)=5; AREF(constP,27)=5; AREF(constP,28)=0; */ \
+      fvMain(); \
+      return 0; }
+#elif CFG_LANG_ANSIC_SIGNED
+  /* Compile: gcc -s -O3 -DCFG_LANG_ANSIC_SIGNED=1 -ansi -pedantic -W -Wall -Wstrict-prototypes -Wtraditional -Wnested-externs -Wpointer-arith -Wbad-function-cast -Wcast-qual -Wmissing-prototypes -Winline -Wmissing-declarations munzip.c
+   *
+   * a.out: 6660 bytes
+   * Test Bash:     340ms user
+   * Test Random:    70ms user
+   * Test Misc:     360ms user
+   */
+  #define RETURN(fname,value) return value;
+  #define ALLOW_LOCALS 1
+  #define GLOBAL_REF(varname)
+  #define PASS
+  #define ENDFUN }
+  #define IF(c) if (c) {
+  #define ELSE_IF(c) } else if (c) {
+  #define ELSE } else {
+  #define ENDIF }
+  #define WHILE(c) while (c) {
+  #define ENDWHILE }
+  #undef SMALLEST_CODE /* do not optimize for smallest code size */
+  #define ENDDOT2
+  #define AREF(aname,idx) aname[idx]
+  #define GLOBAL_INIT_ARRAY(type,name) static CONST type name[]
+  #define ARY {
+  #define YRA }
+  #define DEFUN_0(rtype,name) static rtype name(void) {
+  #define DEFUN_1(rtype,name,atype) static rtype name(atype arg) {
+  #define SHL(a,b) ((a)<<(b))
+  #define SHR(a,b) ((a)>>(b))
+  #define my_putchar putchar
+  #define my_getchar getchar
+  #include <stdio.h> /* putchar(), getchar() */
+  #define BYTE signed char
+  #define WORD signed short
+  #define GLOBAL_VAR(type,name) static type name
+  #define LOCAL_VAR(type,name) type name
+  /* #define LOCAL_VAR auto -- also possible */
+  #define CONST const
+  #define ENDDOT
+  #define VOID void
+  #define RETURN_VOID
+  #define RETURN_FORCE_VOID return
+  #define GLOBAL_ARRAY(type,name,length) static type name[length]
+  #define HAVE_ARRAY_INIT 1
+  #define ADD(r,a) ((r)+=(a))
+  #define SUB(r,a) ((r)-=(a))
+  #define SLIDE(r) (r)++; (r)&=32767
+  #define TAND_1(a) (0!=((a)&1))
+  #define TAND_P(a,p) (0!=((a)&(p)))
+  #define TNAND_P(a,p) (0==((a)&(p)))
+  #define AND_255(a) ((a)&255)
+  #define AND_7(a) ((a)&7)
+  #define AND_LOW(a,b) ((a)&((1<<(b))-1))
+  #define TWICE(a) ((a)<<1)
+  #define INCR(r) ((r)++)
+  #define DECR(r) ((r)--)
+  static void fvMain(void);
+  int main(int argc, char **argv);
+  int main(int argc, char **argv) {
+    (void)argc; (void)argv;
+    fvMain();
+    return 0;
+  }
+#elif CFG_LANG_ISOPASCAL
+  /* Compile: ...
+   *
+   * Doesn't work with `gpc' because stuuupid produces code that cannot read
+   * \0 from input. Works with `ppc386'.
+   */
+  #define RETURN(fname,value) return value;
+  #define ALLOW_LOCALS 1
+  #define GLOBAL_REF(varname)
+  #define PASS
+  #define ENDFUN end; { FUNCTION }
+  #define IF(c) if c then begin
+  #define ELSE_IF(c) end else if c then begin
+  #define ELSE end else begin
+  #define ENDIF end; { IF }
+  #define WHILE(c) while c do begin
+  #define ENDWHILE end; { WHILE }
+  #undef SMALLEST_CODE /* do not optimize for smallest code size */
+  #define ENDDOT2
+  #define AREF(aname,idx) aname[idx]
+  #define GLOBAL_INIT_ARRAY(type,name) static CONST type name[]
+  #define ARY {
+  #define YRA }
+  #define DEFUN_0(rtype,name) function name: rtype;
+  #define DEFUN_1(rtype,name,atype) function name(arg: atype);
+  #define SHL(a,b) ((a)<<(b))
+  #define SHR(a,b) ((a)>>(b))
+  #define my_putchar(c) putchar(c)
+  #define my_getchar() getchar
+  #define BYTE signed char
+  #define WORD signed short
+  #define GLOBAL_VAR(type,name) static type name
+  #define LOCAL_VAR(type,name) type name
+  /* #define LOCAL_VAR auto -- also possible */
+  #define CONST const
+  #define VOID integer
+  #define RETURN_VOID return 0
+  #define RETURN_FORCE_VOID return
+  #define GLOBAL_ARRAY(type,name,length) static type name[length]
+  #define HAVE_ARRAY_INIT 1
+  #define ADD(r,a) ((r)+=(a))
+  #define SUB(r,a) ((r)-=(a))
+  #define SLIDE(r) (r)++; (r)&=32767
+  #define TAND_1(a) (0!=((a)&1))
+  #define TAND_P(a,p) (0!=((a)&(p)))
+  #define TNAND_P(a,p) (0==((a)&(p)))
+  #define AND_255(a) ((a)&255)
+  #define AND_7(a) ((a)&7)
+  #define AND_LOW(a,b) ((a)&((1<<(b))-1))
+  #define TWICE(a) ((a)<<1)
+  #define INCR(r) r:=r+1
+  #define DECR(r) r:=r-1
+  program main(input,output);
+  function getchar: integer;
+    var
+      c: char;
+    begin
+      if eof then getchar:=-1
+             else begin read(c); getchar:=ord(c); end;
+  end;
+  procedure putchar(cc: integer);
+    var
+      c: char;
+    begin
+      c:=cc:
+      write(c);
+  end;
+  #define ENDDOT \
+    begin \
+    end.
+#elif CFG_LANG_PERL
+  /* Compile: (see compile_perl.sh)
+   *
+   * (Uff. Java seems to be faster than Perl. I don't believe it :-))
+   * Test Bash:   31500ms user
+   * Test Random:  4930ms user
+   * Test Misc:   28490ms user
+   */
+  #define RETURN(fname,value) return value;
+  #define ALLOW_LOCALS 1
+  #define GLOBAL_REF(varname)
+  #define PASS
+  #define ENDFUN }
+  #define IF(c) if (c) {
+  #define ELSE_IF(c) } elsif (c) {
+  #define ELSE } else {
+  #define ENDIF }
+  #define WHILE(c) while (c) {
+  #define ENDWHILE }
+  #undef SMALLEST_CODE /* do not optimize for smallest code size */
+  #define ENDDOT2
+  #define GLOBAL_INIT_ARRAY(type,name) my(@name)
+  #define AREF(aname,idx) $ aname[idx]
+  #define ARY (
+  #define YRA )
+  #define DEFUN_0(rtype,name) sub name() {
+  #define DEFUN_1(rtype,name,atype) sub name($) { my arg=$_[0];
+  #define SHL(a,b) ((a)<<(b))
+  #define SHR(a,b) ((a)>>(b))
+  #define my_putchar(c) print(chr(c))
+  #define my_getchar()  (defined($_=getc STDIN)?ord:-1)
+  #define BYTE unused_type_BYTE
+  #define WORD unused_type_WORD
+  #define GLOBAL_VAR(type,name) my(name)
+  #define LOCAL_VAR(type,name) my(name)
+  #define CONST const
+  #define ENDDOT fvMain();
+  #define VOID void
+  #define RETURN_VOID
+  #define RETURN_FORCE_VOID return
+  #define GLOBAL_ARRAY(type,name,length) my(@name)
+  #define HAVE_ARRAY_INIT 1
+  #define ADD(r,a) ((r)+=(a))
+  #define SUB(r,a) ((r)-=(a))
+  #define SLIDE(r) (r)++; (r)&=32767
+  #define TAND_1(a) (0!=((a)&1))
+  #define TAND_P(a,p) (0!=((a)&(p)))
+  #define TNAND_P(a,p) (0==((a)&(p)))
+  #define AND_255(a) ((a)&255)
+  #define AND_7(a) ((a)&7)
+  #define AND_LOW(a,b) ((a)&((1<<(b))-1))
+  #define TWICE(a) ((a)<<1)
+  #define INCR(r) ((r)++)
+  #define DECR(r) ((r)--)
+  #define ty $ty
+  #define arg $arg
+  #define D $D
+  #define C $C
+  #define T $T
+  #define J $J
+  #define Y $Y
+  #define o $o
+  #define q $q
+  #define oo $oo
+  #define ooo $ooo
+  #define oooo $oooo
+  #define f $f
+  #define p $p
+  #define x $x
+  #define v $v
+  #define h $h
+
+  BEGIN{$^W=1} /* enable warnings in PERL */
+  use integer;
+  use strict;
+#elif CFG_LANG_RUBY
+  /* Compile: (see compile_ruby.sh)
+   *
+   * (Uff. Java and Perl seems to be faster than Ruby. I don't believe it :-))
+   * Test Bash:   46400ms user
+   * Test Random:  7020ms user
+   * Test Misc:   42590ms user
+   */
+  /* OK: No space allowed between $ and VARNAME. compile_ruby.sh filters. */
+  /* OK: no ++, -- */
+  #define RETURN(fname,value) return value;
+  #define ALLOW_LOCALS 1
+  #define GLOBAL_REF(varname)
+  #define PASS
+  #define ENDFUN end
+  #define IF(c) if c;
+  #define ELSE_IF(c) elsif c;
+  #define ELSE else
+  #define ENDIF end
+  #define WHILE(c) while c;
+  #define ENDWHILE end
+  #undef SMALLEST_CODE /* do not optimize for smallest code size */
+  #define ENDDOT2
+  #define GLOBAL_INIT_ARRAY(type,name) $ name
+  #define AREF(aname,idx) $ aname[idx]
+  #define ARY [
+  #define YRA ]
+  #define DEFUN_0(rtype,name) def name()
+  #define DEFUN_1(rtype,name,atype) def name(arg)
+  #define SHL(a,b) ((a)<<(b))
+  #define SHR(a,b) ((a)>>(b))
+  #define my_putchar(c) ($>.putc(c))
+  #define my_getchar()  ($<.getc||-1)
+  #define BYTE unused_type_BYTE
+  #define WORD unused_type_WORD
+  #define GLOBAL_VAR(type,name) name=nil
+  #define LOCAL_VAR(type,name) name=nil
+  #define CONST const
+  #define ENDDOT fvMain();
+  #define VOID void
+  #define RETURN_VOID
+  #define RETURN_FORCE_VOID return
+  #define GLOBAL_ARRAY(type,name,length) $ name=[]
+  #define HAVE_ARRAY_INIT 1
+  /* vvv `(r)+=' disallowed */
+  #define ADD(r,a) (r+=(a))
+  #define SUB(r,a) (r-=(a))
+  #define SLIDE(r) r+=1; r&=32767
+  #define TAND_1(a) (0!=((a)&1))
+  #define TAND_P(a,p) (0!=((a)&(p)))
+  #define TNAND_P(a,p) (0==((a)&(p)))
+  #define AND_255(a) ((a)&255)
+  #define AND_7(a) ((a)&7)
+  #define AND_LOW(a,b) ((a)&((1<<(b))-1))
+  #define TWICE(a) ((a)<<1)
+  #define INCR(r) (r+=1)
+  #define DECR(r) (r-=1)
+#if 0 /* local vars are not preceded by $ */
+  #define ty $ty
+  #define arg $arg
+  #define o $o
+  #define q $q
+  #define oo $oo
+  #define ooo $ooo
+  #define oooo $oooo
+  #define f $f
+  #define p $p
+  #define x $x
+  #define v $v
+  #define h $h
+#endif
+  #define D $D
+  #define C $C
+  #define T $T
+  #define J $J
+  #define Y $Y
+#elif CFG_LANG_PYTHON
+  /* Compile: (see compile_python.sh). Note that Python uses indentation
+   * instead of { } braces. But since we cannot provide reliable indentation
+   * because of the #ifdef's, we put braces, and compile_python.sh calls a Perl
+   * script that makes indentation correct
+   *
+   * (Python is the slowest among all.)
+   * Test Bash:   49260ms user
+   * Test Random: 12010ms user
+   * Test Misc:   52050ms user
+   */
+  /* Dat: no $ etc. to select namespace. Globals are barewords, just as in C */
+  /* OK : no ++, --, +=, -= */
+  /* OK : parens not allowed around print */
+  /* Imp: binary STDIN, STDOUT?? */
+  #define RETURN(fname,value) return value;
+  #define ALLOW_LOCALS 1
+  #define GLOBAL_REF(varname) global varname
+  #define PASS pass
+  #define ENDFUN }
+  #define IF(c) if c: {
+  #define ELSE_IF(c) } elif c: {
+  #define ELSE } else: {
+  #define ENDIF }
+  #define WHILE(c) while c: {
+  #define ENDWHILE }
+  #undef SMALLEST_CODE /* do not optimize for smallest code size */
+  #define ENDDOT2
+  #define GLOBAL_INIT_ARRAY(type,name) name
+  #define AREF(aname,idx) aname[idx]
+  #define ARY [
+  #define YRA ]
+  #define DEFUN_0(rtype,name) def name(): {
+  #define DEFUN_1(rtype,name,atype) def name(arg): {
+  #define SHL(a,b) ((a)<<(b))
+  #define SHR(a,b) ((a)>>(b))
+  /* vvv print SUXX, prints extra spaces or \ns */
+  /* #define my_putchar(c) print(chr(c)) */
+  #define my_putchar(c) (sys.stdout.write(chr(c)))
+  #define my_getchar()  (getchar())
+  #define BYTE unused_type_BYTE
+  #define WORD unused_type_WORD
+  #define GLOBAL_VAR(type,name) name=None
+  #define LOCAL_VAR(type,name) name=None
+  #define CONST const
+  #define ENDDOT fvMain();
+  #define VOID void
+  #define RETURN_VOID
+  #define RETURN_FORCE_VOID return
+  #define GLOBAL_ARRAY(type,name,length) name=[None]*length
+  #define HAVE_ARRAY_INIT 1
+  /* vvv `(r)+=' disallowed, `(r=...)' disallowed */
+  #define ADD(r,a) r=r+(a)
+  #define SUB(r,a) r=r-(a)
+  #define SLIDE(r) r=(r+1)&32767
+  #define TAND_1(a) (0!=((a)&1))
+  #define TAND_P(a,p) (0!=((a)&(p)))
+  #define TNAND_P(a,p) (0==((a)&(p)))
+  #define AND_255(a) ((a)&255)
+  #define AND_7(a) ((a)&7)
+  #define AND_LOW(a,b) ((a)&((1<<(b))-1))
+  #define TWICE(a) ((a)<<1)
+  #define INCR(r) r=r+1
+  #define DECR(r) r=r-1
+
+  import sys
+  def getchar(): {
+    ch=sys.stdin.read(1)
+    if not len(ch): return -1
+    return ord(ch)
+  }
+#elif CFG_LANG_KNRC /* K&R (traditional) C, with unsigned integers */
+  /* Compile: gcc -traditional -s -O3 -DCFG_LANG_KNRC=1 -pedantic -W -Wall -Wstrict-prototypes -Wtraditional -Wnested-externs -Wpointer-arith -Wbad-function-cast -Wcast-qual -Wmissing-prototypes -Winline -Wmissing-declarations munzip.c
+   */
+  /* Dat: no spaces allowed before # in K&R C */
+  #define RETURN(fname,value) return value;
+#define ALLOW_LOCALS 1
+#define GLOBAL_REF(varname)
+#define PASS
+#define ENDFUN }
+#define IF(c) if (c) {
+#define ELSE_IF(c) } else if (c) {
+#define ELSE } else {
+#define ENDIF }
+#define WHILE(c) while (c) {
+#define ENDWHILE }
+#define ARY {
+#define YRA }
+#define AREF(aname,idx) aname[idx]
+#define DEFUN_0(rtype,name) static rtype name(void) {
+#define DEFUN_1(rtype,name,atype) static rtype name(arg) atype arg; {
+#define SHL(a,b) ((a)<<(b))
+#define SHR(a,b) ((a)>>(b))
+  /* used library functions */
+#define my_putchar(c) fputc(c,stdout)
+  /* ^^^ so `gcc -traditional' works with GCC 2.7.2.3, Debian Slink */
+#define my_getchar() fgetc(stdin)
+#include <stdio.h> /* putchar(), getchar() */
+  /* used integer types, except for main() */
+#define BYTE unsigned char /* 8 bits */
+#define WORD unsigned short /* >=16 bits; works either unsigned or signed */
+#define GLOBAL_VAR(type,name)  static type name
+#define LOCAL_VAR(type,name) type name
+  /* #define LOCAL_VAR auto -- also possible */
+#define CONST const
+#define ENDDOT
+#define VOID int
+   /* ^^^ Imp: do we need this? does K&R C have `void'? as return type? */
+#define RETURN_VOID return 0
+  #define RETURN_FORCE_VOID return
+#define GLOBAL_INIT_ARRAY(type,name) static CONST type name[]
+#define GLOBAL_ARRAY(type,name,length) static type name[length]
+#define HAVE_ARRAY_INIT 1
+#define ADD(r,a) ((r)+=(a))
+#define SUB(r,a) ((r)-=(a))
+#define SLIDE(r) (r)++; (r)&=32767
+#define TAND_1(a) (0!=((a)&1))
+#define TAND_P(a,p) (0!=((a)&(p)))
+#define TNAND_P(a,p) (0==((a)&(p)))
+#define AND_255(a) ((a)&255)
+#define AND_7(a) ((a)&7)
+#define AND_LOW(a,b) ((a)&((1<<(b))-1))
+#define TWICE(a) ((a)<<1)
+#define INCR(r) ((r)++)
+#define DECR(r) ((r)--)
+  static VOID fvMain(void);
+  int main(int argc, char **argv);
+  int main(int argc, char **argv) {
+    (void)argc; (void)argv;
+    fvMain();
+    return 0;
+  }
+  int x;
+#elif CFG_LANG_ANSIC_SYSCALL /* ANSI C, with syscalls read(2) and write(2) */
+  #define RETURN(fname,value) return value;
+  #define ALLOW_LOCALS 1
+  #define GLOBAL_REF(varname)
+  #define PASS
+  #define ENDFUN }
+  #define IF(c) if (c) {
+  #define ELSE_IF(c) } else if (c) {
+  #define ELSE } else {
+  #define ENDIF }
+  #define WHILE(c) while (c) {
+  #define ENDWHILE }
+  #undef SMALLEST_CODE /* do not optimize for smallest code size */
+  #define ENDDOT2
+  #define AREF(aname,idx) aname[idx]
+  #define GLOBAL_INIT_ARRAY(type,name) static CONST type name[]
+  #define ARY {
+  #define YRA }
+  #define DEFUN_0(rtype,name) static rtype name(void) {
+  #define DEFUN_1(rtype,name,atype) static rtype name(atype arg) {
+  #define SHL(a,b) ((a)<<(b))
+  #define SHR(a,b) ((a)>>(b))
+  /* used integer types, except for main() */
+  #define BYTE unsigned char /* 8 bits */
+  #define WORD unsigned short /* >=16 bits; works either unsigned or signed */
+  #define GLOBAL_VAR(type,name)  static type name
+  #define LOCAL_VAR(type,name) type name
+  /* #define LOCAL_VAR auto -- also possible */
+  #define CONST const
+  #define ENDDOT
+  #define VOID void
+  #define RETURN_VOID
+  #define RETURN_FORCE_VOID return
+  #define GLOBAL_ARRAY(type,name,length) static type name[length]
+  #define HAVE_ARRAY_INIT 1
+  #define ADD(r,a) ((r)+=(a))
+  #define SUB(r,a) ((r)-=(a))
+  #define SLIDE(r) (r)++; (r)&=32767
+  #define TAND_1(a) (0!=((a)&1))
+  #define TAND_P(a,p) (0!=((a)&(p)))
+  #define TNAND_P(a,p) (0==((a)&(p)))
+  #define AND_255(a) ((a)&255)
+  #define AND_7(a) ((a)&7)
+  #define AND_LOW(a,b) ((a)&((1<<(b))-1))
+  #define TWICE(a) ((a)<<1)
+  #define INCR(r) ((r)++)
+  #define DECR(r) ((r)--)
+  
+  #include <unistd.h> /* read(2) and write(2) */
+  #define BUFSIZE 4096
+  static char rbuf[BUFSIZE], *rend=rbuf+BUFSIZE, *rp=rbuf+BUFSIZE;
+  static char wbuf[BUFSIZE], *wend=wbuf+BUFSIZE, *wp=wbuf;
+  /* (wp==wend?flush_putchar(  S [ C ]  ):*wp++=5) ; */
+  #define my_putchar(c) (wp==wend?flush_putchar(c):(*wp++=c))
+  #define my_getchar()  (rp==rend?more_getchar():*rp++)
+  static int flush_putchar(char c) {
+    write(1, wbuf, wp-wbuf); /* assume no errors */
+    *wbuf=c;
+    wp=wbuf+1;
+    return 0; /* dummy */
+  }
+  static char more_getchar(void) {
+    int got;
+    if (rend==rbuf) return -1; /* previous read returned EOF */
+    got=read(0, rbuf, BUFSIZE);
+    if (got<1) { rend=rbuf; return -1; }
+    rend=rbuf+got;
+    rp=rbuf+1;
+    return *rbuf;
+  }
+
+  static void fvMain(void);
+  int main(int argc, char **argv);
+  int main(int argc, char **argv) {
+    (void)argc; (void)argv;
+    fvMain();
+    flush_putchar(0); /* flush remaining bytes to STDOUT */
+    return 0;
+  }
+#elif CFG_LANG_ANSIC_LINUX /* ANSI C, with Linux kernel syscalls read(2) and write(2) */
+  /* please link me with `ld -e _niam_' */
+  #define RETURN(fname,value) return value;
+  #define ALLOW_LOCALS 1
+  #define GLOBAL_REF(varname)
+  #define PASS
+  #define ENDFUN }
+  #define IF(c) if (c) {
+  #define ELSE_IF(c) } else if (c) {
+  #define ELSE } else {
+  #define ENDIF }
+  #define WHILE(c) while (c) {
+  #define ENDWHILE }
+  #undef SMALLEST_CODE /* do not optimize for smallest code size */
+  #define ENDDOT2
+  #define AREF(aname,idx) aname[idx]
+  #define GLOBAL_INIT_ARRAY(type,name) static CONST type name[]
+  #define ARY {
+  #define YRA }
+  #define DEFUN_0(rtype,name) static rtype name(void) {
+  #define DEFUN_1(rtype,name,atype) static rtype name(atype arg) {
+  #define SHL(a,b) ((a)<<(b))
+  #define SHR(a,b) ((a)>>(b))
+  /* used integer types, except for main() */
+  #define BYTE unsigned char /* 8 bits */
+  #define WORD unsigned short /* >=16 bits; works either unsigned or signed */
+  #define GLOBAL_VAR(type,name)  static type name
+  #define LOCAL_VAR(type,name) type name
+  /* #define LOCAL_VAR auto -- also possible */
+  #define CONST const
+  #define ENDDOT
+  #define VOID void
+  #define RETURN_VOID
+  #define RETURN_FORCE_VOID return
+  #define GLOBAL_ARRAY(type,name,length) static type name[length]
+  #define HAVE_ARRAY_INIT 1
+  #define ADD(r,a) ((r)+=(a))
+  #define SUB(r,a) ((r)-=(a))
+  #define SLIDE(r) (r)++; (r)&=32767
+  #define TAND_1(a) (0!=((a)&1))
+  #define TAND_P(a,p) (0!=((a)&(p)))
+  #define TNAND_P(a,p) (0==((a)&(p)))
+  #define AND_255(a) ((a)&255)
+  #define AND_7(a) ((a)&7)
+  #define AND_LOW(a,b) ((a)&((1<<(b))-1))
+  #define TWICE(a) ((a)<<1)
+  #define INCR(r) ((r)++)
+  #define DECR(r) ((r)--)
+
+  /* vvv Linux kernel magic */  
+  #define __KERNEL_SYSCALLS__
+  #include <linux/types.h>   
+  #include <linux/unistd.h>
+  int errno; /* not extern!! */
+
+  #define BUFSIZE 4096
+  static char rbuf[BUFSIZE], *rend=rbuf+BUFSIZE, *rp=rbuf+BUFSIZE;
+  static char wbuf[BUFSIZE], *wend=wbuf+BUFSIZE, *wp=wbuf;
+  /* (wp==wend?flush_putchar(  S [ C ]  ):*wp++=5) ; */
+  #define my_putchar(c) (wp==wend?flush_putchar(c):(*wp++=c))
+  #define my_getchar()  (rp==rend?more_getchar():*rp++)
+  static int flush_putchar(char c) {
+    write(1, wbuf, wp-wbuf); /* assume no errors */
+    *wbuf=c;
+    wp=wbuf+1;
+    return 0; /* dummy */
+  }
+  static char more_getchar(void) {
+    int got;
+    if (rend==rbuf) return -1; /* previous read returned EOF */
+    got=read(0, rbuf, BUFSIZE);
+    if (got<1) { rend=rbuf; return -1; }
+    rend=rbuf+got;
+    rp=rbuf+1;
+    return *rbuf;
+  }
+
+  static void fvMain(void);
+  int _niam_(int argc, char **argv);
+  int _niam_(int argc, char **argv) {
+    (void)argc; (void)argv;
+    fvMain();
+    flush_putchar(0); /* flush remaining bytes to STDOUT */
+    _exit(0);
+    return 0;
+  }
+#else /* ANSI C, with unsigned integers */
+  /* Compile: gcc -s -O3 -DCFG_LANG_ANSIC=1 -ansi -pedantic -W -Wall -Wstrict-prototypes -Wtraditional -Wnested-externs -Wpointer-arith -Wbad-function-cast -Wcast-qual -Wmissing-prototypes -Winline -Wmissing-declarations munzip.c
+   *
+   * a.out: 6660 bytes
+   * Test Bash:     350ms user
+   * Test Random:    70ms user
+   * Test Misc:     370ms user
+   */
+  #undef  CFG_LANG_ANSIC
+  #define CFG_LANG_ANSIC 1
+  #define RETURN(fname,value) return value;
+  #define ALLOW_LOCALS 1
+  #define GLOBAL_REF(varname)
+  #define PASS
+  #define ENDFUN }
+  #define IF(c) if (c) {
+  #define ELSE_IF(c) } else if (c) {
+  #define ELSE } else {
+  #define ENDIF }
+  #define WHILE(c) while (c) {
+  #define ENDWHILE }
+  #undef SMALLEST_CODE /* do not optimize for smallest code size */
+  #define ENDDOT2
+  #define AREF(aname,idx) aname[idx]
+  #define GLOBAL_INIT_ARRAY(type,name) static CONST type name[]
+  #define ARY {
+  #define YRA }
+  #define DEFUN_0(rtype,name) static rtype name(void) {
+  #define DEFUN_1(rtype,name,atype) static rtype name(atype arg) {
+  #define SHL(a,b) ((a)<<(b))
+  #define SHR(a,b) ((a)>>(b))
+  /* used library functions */
+  #define my_putchar putchar
+  #define my_getchar getchar
+  #include <stdio.h> /* putchar(), getchar() */
+  /* used integer types, except for main() */
+  #define BYTE unsigned char /* 8 bits */
+  #define WORD unsigned short /* >=16 bits; works either unsigned or signed */
+  #define GLOBAL_VAR(type,name)  static type name
+  #define LOCAL_VAR(type,name) type name
+  /* #define LOCAL_VAR auto -- also possible */
+  #define CONST const
+  #define ENDDOT
+  #define VOID void
+  #define RETURN_VOID
+  #define RETURN_FORCE_VOID return
+  #define GLOBAL_ARRAY(type,name,length) static type name[length]
+  #define HAVE_ARRAY_INIT 1
+  #define ADD(r,a) ((r)+=(a))
+  #define SUB(r,a) ((r)-=(a))
+  #define SLIDE(r) (r)++; (r)&=32767
+  #define TAND_1(a) (0!=((a)&1))
+  #define TAND_P(a,p) (0!=((a)&(p)))
+  #define TNAND_P(a,p) (0==((a)&(p)))
+  #define AND_255(a) ((a)&255)
+  #define AND_7(a) ((a)&7)
+  #define AND_LOW(a,b) ((a)&((1<<(b))-1))
+  #define TWICE(a) ((a)<<1)
+  #define INCR(r) ((r)++)
+  #define DECR(r) ((r)--)
+  static void fvMain(void);
+  int main(int argc, char **argv);
+  int main(int argc, char **argv) {
+    (void)argc; (void)argv;
+    fvMain();
+    return 0;
+  }
+#endif
+
+/* datatype declarations
+ * It would be simple to define a struct for the binary Huffmann tree we
+ * need for decompression as:
+ * 
+ *      struct node {
+ *        struct node *left, *right;
+ *        WORD value;
+ *      };
+ * 
+ * But this approach would mean that we would need `pointer's. Many programming
+ * languages don't have pointers, so the program would be less portable (but
+ * the source would be more readable). So we use the array `N' for representing
+ * nodes (one WORD for left, one WORD for right, one WORD for value). Nodes
+ * are addressed with their node number (NODEN) in the array N. Every NODEN is
+ * divisible by 3. `F' points to the first free node. Free nodes have their
+ * left pointer pointing to the next free node. There is always a `next' free
+ * node (i.e we don't have to deal with out-of-memory errors) beacuse the gzip
+ * algorithm guarantees that the array `N' never exhausts.
+ * The following formula is bad: 1998 > 3*2*(286+2+30+2), one has too examine
+ * the RFC again :-(. Empirically: 1996 and 1997 are not enough, 1998 is.
+ */
+#undef NULL
+#define NULL 0
+#undef NODEN
+#define NODEN WORD
+#define NODESIZE 1998 /* NODESIZE%3==0 */
+/**
+ * Index of the first free node in <code>N</code>.
+ */
+GLOBAL_VAR(NODEN,D);
+#define LEFT(noden)  (AREF(N,(noden)+0)) /* unused */
+#define RIGHT(noden) (AREF(N,(noden)+1)) /* unused */
+#define NVAL(noden)  (AREF(N,(noden)+2)) /* unused */
+
+#if 0
+/* function declarations -- not needed at all (not even in C), because all
+ * functions are static, and they are defined in non-forward-referencing
+ * order.
+ */
+STATIC_FUNC VOID fvMain(void);
+STATIC_FUNC NODEN fvNalloc(void);
+STATIC_FUNC VOID fvFree(NODEN root);
+STATIC_FUNC WORD fvDescend(NODEN root);
+STATIC_FUNC VOID fvWrite(WORD param);
+STATIC_FUNC NODEN fvMktree(WORD param);
+STATIC_FUNC WORD fvRead(WORD param);
+#endif
+
+/* constant arrays (lookup tables) */
+#if HAVE_ARRAY_INIT
+  GLOBAL_INIT_ARRAY(WORD,constW) = ARY 16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15 YRA;
+  GLOBAL_INIT_ARRAY(WORD,constU) = ARY 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258 YRA;
+  GLOBAL_INIT_ARRAY(WORD,constP) = ARY 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0 YRA;
+  GLOBAL_INIT_ARRAY(WORD,constQ) = ARY 1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577 YRA;
+  GLOBAL_INIT_ARRAY(WORD,constL) = ARY 0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13 YRA;
+#else
+  GLOBAL_ARRAY(WORD, constW,19);
+  GLOBAL_ARRAY(WORD, constU,29);
+  GLOBAL_ARRAY(WORD, constP,29);
+  GLOBAL_ARRAY(WORD, constQ,30);
+  GLOBAL_ARRAY(WORD, constL,30);
+#endif
+
+GLOBAL_VAR(WORD,C); /* index (in S) of the oldest char, [0..32767] */
+GLOBAL_VAR(WORD,T); /* index (in S) of the first free position, [0..32767] */
+
+/**
+ * A buffer of 16 bits for storing bits read but not processed yet. Needed
+ * because we can read only bytes, not bits with getchar(). Was 32 bits,
+ * but could be reduced.
+ * Used by only fvRead().
+ */
+GLOBAL_VAR(WORD,J);
+/**
+ * The number of bits in the buffer <code>J</code>. Used only in fvRead();
+ */
+GLOBAL_VAR(WORD,Y);
+
+/**
+ * Contains the code word lengths used for Huffman code generation in
+ * fvMktree(). 320==288+32. 320 is large enough to hold both the code lengths
+ * of the literal--length (288) and the distance (32) Huffman trees.
+ */
+GLOBAL_ARRAY(WORD,Z,320);
+
+GLOBAL_ARRAY(WORD,B,17);
+GLOBAL_ARRAY(WORD,G,17);
+
+#if ALLOW_LOCALS
+  #define no o
+  #define roo oo
+  #define moo oo
+  #define mq q
+  #define mo o
+  #define mf f
+#else
+  GLOBAL_VAR(NODEN,no);
+  GLOBAL_VAR(WORD,roo);
+  GLOBAL_VAR(WORD,rf);
+  GLOBAL_VAR(WORD,moo);
+  GLOBAL_VAR(WORD,mq);
+  GLOBAL_VAR(WORD,mo);
+  GLOBAL_VAR(WORD,mf);
+  GLOBAL_VAR(WORD,o);
+  GLOBAL_VAR(WORD,q);
+  GLOBAL_VAR(WORD,ty);
+  GLOBAL_VAR(WORD,oo);
+  GLOBAL_VAR(WORD,ooo);
+  GLOBAL_VAR(WORD,oooo);
+  GLOBAL_VAR(WORD,f);
+  GLOBAL_VAR(WORD,p);
+  GLOBAL_VAR(WORD,v);
+  GLOBAL_VAR(WORD,h);
+  GLOBAL_VAR(WORD,x);
+  #undef LOCAL_VAR
+  #define LOCAL_VAR(a,b)
+#endif
+
+GLOBAL_ARRAY(WORD,N,NODESIZE);
+GLOBAL_ARRAY(BYTE,S,32768);
+
+AFTER_GLOBALS
+
+/**
+ * Reads <code>param</code> bits from input.
+ * @param param number of bits to read
+ * @return WORD, consisting of the bits
+ * @whichcode 1
+ */
+DEFUN_1(WORD,fvRead,WORD)
+  GLOBAL_REF(Y)
+  GLOBAL_REF(J)
+  LOCAL_VAR(WORD,roo);
+  LOCAL_VAR(WORD,rf);
+  IF(0!=arg)
+    /* Assert: 0<=Y && Y<=7; */
+    /* Assert: 1<=arg && arg<=16; */
+    /* if (Y>7 || arg>16) abort(); */
+    /* J can hold at most 16 bits, may be signed or unsigned */
+    IF(Y+7 < arg)
+      /* ^^^ `if' is ok instead of `while', because of the asserts above */
+      ADD(J,SHL(AND_255(my_getchar()),Y));
+      ADD(Y,8);
+    ENDIF
+    IF(Y < arg) /* Y < arg < Y+8 */
+      rf=AND_255(my_getchar());
+      IF(arg==16)
+        /* Assert: 9<=Y && Y<=15 */
+        roo=J+SHL(AND_LOW(rf,16-Y),Y);
+        J=SHR(rf, 16-Y); /* 1 <= 16-Y <= 7, it's safe to call SHR */
+      ELSE
+        roo = AND_LOW(J+SHL(rf,Y), arg);
+        J = SHR(rf, arg-Y); /* 0<=f && f<=255, no need to cast to unsigned */
+        /* ^^^ 1<=arg-Y && arg-Y<=7, so it's safe to call SHR */
+      ENDIF
+      ADD(Y, 8-arg); /* 8-arg may be negative, but Y remains nonnegative */
+    ELSE /* Y >= arg */
+      /* Assert: 1<=Y && Y<=8; */
+      /* Assert: 1<=arg && arg<=8; */
+      roo = AND_LOW(J, arg);
+      SUB(Y,arg);
+      J = AND_LOW(SHR(J, arg), Y); /* J >>= arg; */
+      /* ^^^ this has been corrected to be signedness-independent */
+      /* ^^^ 1<=arg && arg<=8, so it's safe to call SHR */
+    ENDIF
+    /* fprintf(stderr, "read %d\n", roo&0xffff); */
+    return roo;
+  ELSE
+    return 0;
+  ENDIF
+ENDFUN
+
+/** 
+ * Allocates a new node and initializes it with empty content. This function
+ * lets we get rid of the global variable F (which was buggily uninitialized
+ * in the original scm.c).
+ * @return pointer to the newly allocated node
+ * @whichcode -1
+ */
+DEFUN_0(NODEN,fvNalloc)
+  GLOBAL_REF(N)
+  GLOBAL_REF(D)
+  LOCAL_VAR(NODEN,no); /* the first/next free node */
+  no=D;
+#if 0
+  if (no>NODESIZE) abort(); /* abort if out of memory */
+#endif  
+  D=AREF(N,no); /* not free anymore */
+  AREF(N,no)=NULL; /* clear; the other two fields are already cleared */
+  /* N[n+1)=NULL; N[n+2)=0; */
+  /* fprintf(stderr, "alloc %d\n", n); */
+  return no;
+ENDFUN
+
+/**
+ * Frees the Huffman tree originating from <code>root</code> recursively.
+ * Used <code>I</code> as input only.
+ * Moved <code>I</code> into a argeter.
+ * @param arg root node index in N
+ */
+DEFUN_1(VOID,fvFree,NODEN)
+  GLOBAL_REF(N)
+  GLOBAL_REF(D)
+  IF(NULL!=arg)
+    fvFree(AREF(N,arg));
+    fvFree(AREF(N,arg+1));
+    /* fprintf(stderr, "free %d\n", arg); */
+    AREF(N,arg+1)=NULL; /* clear */
+    AREF(N,arg+2)=0; /* clear */
+    AREF(N,arg)=D; /* link to the beginning of the free list */
+    D=arg; /* set it free */
+  ENDIF
+  RETURN_VOID;
+ENDFUN
+
+/**
+ * Goes down (descends) enough levels in the binary tree of (struct node)s.
+ * Reads numbers from input encoded as a Huffman tree represented by the
+ * (struct node)s.
+ * Called only from 2 places.
+ * Used <code>I</code> as both input and output, but the output is never used in the
+ * program. So I've put <code>I</code> to a argeter.
+ * @param arg root is only for input
+ * @whichcode 3
+ */
+DEFUN_1(WORD,fvDescend,NODEN)
+  GLOBAL_REF(N)
+  WHILE(NULL!=AREF(N,arg))
+    IF(0!=fvRead(1))
+      arg=AREF(N,arg+1);
+    ELSE
+      arg=AREF(N,arg);
+    ENDIF
+  ENDWHILE
+  return AREF(N,arg+2); /* arg->value; */
+ENDFUN
+
+/**
+ * Allocates new (struct node)s. This is the Huffman tree
+ * builder. It uses the global array <code>Z</code>: the code lengths are
+ * stored there.
+ * Used <code>I</code> as output only, so I moved it to the return value.
+ * @param arg the number of entries (codes) of the Huffman tree to be built
+ * @return the root of the Huffman tree just built
+ * @whichcode 5
+ */
+DEFUN_1(NODEN,fvMktree,WORD)
+  GLOBAL_REF(B)
+  GLOBAL_REF(G)
+  GLOBAL_REF(N)
+  GLOBAL_REF(Z)
+  LOCAL_VAR(WORD,moo);
+  LOCAL_VAR(WORD,mq);
+  LOCAL_VAR(WORD,mo);
+  LOCAL_VAR(WORD,mf);
+  /* NODEN anode; */
+#if SMALLEST_CODE
+  moo=0; WHILE(moo<17) AREF(B,moo)=0; INCR(moo); ENDWHILE
+#else
+  AREF(B,0)=0; AREF(B,1)=0; AREF(B,2)=0; AREF(B,3)=0; AREF(B,4)=0; AREF(B,5)=0; AREF(B,6)=0; AREF(B,7)=0; AREF(B,8)=0;
+  AREF(B,9)=0; AREF(B,10)=0; AREF(B,11)=0; AREF(B,12)=0; AREF(B,13)=0; AREF(B,14)=0; AREF(B,15)=0; AREF(B,16)=0;
+#endif
+  moo=0;
+  WHILE(moo < arg) INCR(AREF(B,AREF(Z,moo))); INCR(moo); ENDWHILE
+  AREF(B,0)=0;
+  AREF(G,0)=0;
+#if SMALLEST_CODE
+  moo=0;
+  WHILE(moo<16)
+    AREF(G, moo+1)=TWICE(AREF(G,moo)+AREF(B,moo));
+    INCR(moo);
+  ENDWHILE
+#else
+  AREF(G, 1) = TWICE(AREF(G, 0)+AREF(B, 0)); AREF(G, 2) = TWICE(AREF(G, 1)+AREF(B, 1));
+  AREF(G, 3) = TWICE(AREF(G, 2)+AREF(B, 2)); AREF(G, 4) = TWICE(AREF(G, 3)+AREF(B, 3));
+  AREF(G, 5) = TWICE(AREF(G, 4)+AREF(B, 4)); AREF(G, 6) = TWICE(AREF(G, 5)+AREF(B, 5));
+  AREF(G, 7) = TWICE(AREF(G, 6)+AREF(B, 6)); AREF(G, 8) = TWICE(AREF(G, 7)+AREF(B, 7));
+  AREF(G, 9) = TWICE(AREF(G, 8)+AREF(B, 8)); AREF(G,10) = TWICE(AREF(G, 9)+AREF(B, 9));
+  AREF(G,11) = TWICE(AREF(G,10)+AREF(B,10)); AREF(G,12) = TWICE(AREF(G,11)+AREF(B,11));
+  AREF(G,13) = TWICE(AREF(G,12)+AREF(B,12)); AREF(G,14) = TWICE(AREF(G,13)+AREF(B,13));
+  AREF(G,15) = TWICE(AREF(G,14)+AREF(B,14)); AREF(G,16) = TWICE(AREF(G,15)+AREF(B,15));
+#endif
+  /* Dat: anode is the ->left pointer of the Sentinel node */
+  AREF(N,3)=NULL; /* anode=NULL; */
+  moo=0;
+  WHILE(moo < arg)
+    IF(0!=AREF(Z,moo))
+      /* WORD o, f; */ /* struct node **f; */
+      mq = AREF(G,AREF(Z,moo));
+      INCR(AREF(G,AREF(Z,moo)));
+      mf=3; /* mf=&anode; */
+      mo = AREF(Z,moo);
+      WHILE(mo!=0)
+        DECR(mo);
+        IF(AREF(N,mf)==NULL)
+          AREF(N,mf)=fvNalloc();
+        ENDIF
+        /* if (0!=((mq>>o)&1)) f=&(*f)->right; else f=&(*f)->left; */
+        IF(TAND_P(mq,SHL(1,mo)))
+          mf=AREF(N,mf)+1;
+        ELSE
+          mf=AREF(N,mf)+0;
+        ENDIF
+      ENDWHILE
+      AREF(N,mf)=fvNalloc();
+      AREF(N,AREF(N,mf)+2)=moo; /* (*f)->value=moo; */
+    ENDIF
+    INCR(moo);
+  ENDWHILE
+  return AREF(N,3);
+ENDFUN
+
+/**
+ * Writes out a character if available.
+ * @whichcode 2
+ */
+DEFUN_1(VOID,fvWrite,WORD)
+  GLOBAL_REF(T)
+  GLOBAL_REF(S)
+  GLOBAL_REF(C)
+  /* fprintf(stderr, "write %d\n", arg&0xffff); */
+#if 0
+    /* we don't need this because T and C are already in [0..32767) */
+    T&=32767;
+#endif
+  AREF(S,T) = arg;
+  SLIDE(T); /* T++; T&=32767; */
+  IF(T==C)
+    my_putchar(AREF(S,C));
+    SLIDE(C); /* C++; C&=32767; */
+  ENDIF
+  RETURN_VOID;
+ENDFUN
+
+#define FMT_ZIP_STORED    0
+#define FMT_ZLIB   1
+#define FMT_GZIP   2
+#define FMT_NONE   3
+#define FMT_STOP   4
+#define FMT_ZIP_DEFLATED 8 /* file is stored, not Deflated in ZIP file */
+
+/**
+ * @whichcode 0, 6
+ */
+DEFUN_0(VOID,fvMain)
+  GLOBAL_REF(J)
+  GLOBAL_REF(Y)
+  GLOBAL_REF(C)
+  GLOBAL_REF(T)
+  GLOBAL_REF(N)
+  GLOBAL_REF(D)
+  LOCAL_VAR(WORD,o);
+  LOCAL_VAR(WORD,q);
+  LOCAL_VAR(WORD,ty); /* type of input file */
+  /* vvv sub-locals */
+  LOCAL_VAR(WORD,oo);
+  LOCAL_VAR(WORD,ooo);
+  LOCAL_VAR(WORD,oooo);
+  LOCAL_VAR(WORD,f);
+  LOCAL_VAR(WORD,p);
+  LOCAL_VAR(WORD,x);
+  /**
+   * Root of the literal--length Huffman tree in <code>N</code>
+   * (see RFC 1951). Its length is at most 288 with values 0..287. Values
+   * 286 and 287 are invalid. A value in 0..255 means a literal byte, a
+   * value of 256 indicates end-of-block, and a
+   * value in 257..285 is a prefix (with 29 possible values) of a length
+   * in 3..258. See subsubsection 3.2.5 of RFC 1951.
+   */
+  LOCAL_VAR(NODEN,v);
+  /**
+   * Root of the distance Huffman tree in <code>N</code> (see RFC 1951).
+   * Its length is at most 32 with values 0..31. Values 30 and 31 are invalid.
+   * A value of 0..29 is a prefix (with 30 possible values) of a distance in
+   * 1..32768. See subsubsection 3.2.5 of RFC 1951.
+   */
+  LOCAL_VAR(NODEN,h);
+
+  ty=FMT_NONE;
+#ifdef CFG_MULTIPLE
+  WHILE(ty!=FMT_STOP) /* outermost while loop */
+#endif
+  oo=0; ooo=0; /* avoid GCC warnings */
+  J=0; Y=0; C=0; T=0;
+  v=NULL; h=NULL;
+  AREF(N,0)=NULL; AREF(N,1)=NULL; AREF(N,2)=0; /* the NULL node is initially empty */
+  AREF(N,3)=NULL; AREF(N,4)=NULL; AREF(N,5)=0; /* the Sentinel node is initially empty */
+  D=6; /* first free node is 6. `0' is NULL, `3' is Sentinel */
+  o=D;
+  WHILE (o<NODESIZE)
+    AREF(N,o)=o+3;  INCR(o); /* next free node is next node */
+    AREF(N,o)=NULL; INCR(o); /* empty RIGHT */
+    AREF(N,o)=0;    INCR(o); /* empty NVAL */
+  ENDWHILE
+#ifdef CFG_INPUT_RAW
+#else
+    ty=my_getchar(); /* read first byte of the header */
+    /* fprintf(stderr,"ty=%d %d!\n",ty, TAND_P(512+ty,256)); */
+    IF(TAND_P(512+ty,256)) /* EOF */
+      /* RETURN_FORCE_VOID; */
+      ty=FMT_STOP;
+    ELSE_IF(ty==120) /* ZLIB format */
+      fvRead(8); /* skip second header byte: 0x01 or 0x5e or 0x9c or 0xda */
+      ty=FMT_ZLIB;
+    ELSE_IF(ty==80) /* ZIP format */
+      /* Note that fvRead(16) reads in the wrong byte order, so we must
+       * ignore it. Constants are presented in the right byte order (LSB
+       * first).
+       */
+      fvRead(8); /* skip second header byte: 0x48 */
+      o=fvRead(8);
+      ty=FMT_NONE;
+      IF(o==3) /* Local file header */
+        fvRead(8); /* skip: 0x04 */
+        fvRead(16); /* skip: version needed to extract file (0x0020) */
+        fvRead(16); /* LOCFLG flags */
+        ty=fvRead(8); /* lower half of compression method */
+        fvRead(8); /* upper half of compression method */
+        fvRead(16); fvRead(16); /* file modification time in MS-DOS format */
+        fvRead(16); fvRead(16); /* some kind of CRC-32 */
+        oo= fvRead(8); ADD(oo,  fvRead(8)*256); /* lower compressed file size */
+        ooo=fvRead(8); ADD(ooo, fvRead(8)*256); /* higher compressed file size */
+        fvRead(16); fvRead(16); /* uncompressed file size */
+        f=fvRead(8); ADD(f, fvRead(8)*256); /* length of filename */      
+        q=fvRead(8); ADD(q, fvRead(8)*256); /* length of extra field */
+        WHILE(f!=0) fvRead(8); DECR(f); ENDWHILE /* file name */
+        WHILE(q!=0) fvRead(8); DECR(q); ENDWHILE /* extra field */
+        /* now: ty is either of FMT_ZIP_STORED or FMT_ZIP_DEFLATED */
+      ELSE_IF(o==7) /* Extended local header of previous file */
+        o=0; WHILE(o<15) fvRead(8); INCR(o); ENDWHILE
+        o=fvRead(8);
+      ELSE_IF(o==5) /* End of Central Directory Structure */
+        /* fprintf(stderr,"EOCDS\n"); */
+        o=0; WHILE(o<17) fvRead(8); INCR(o); ENDWHILE
+        o=fvRead(8); ADD(o, fvRead(8)*256); /* CML: archive comment length */
+        WHILE (o!=0) fvRead(8); DECR(o); ENDWHILE
+      ELSE_IF(o==1) /* Central Directory Structure */
+        /* fprintf(stderr,"CDS\n"); */
+        oo=0; WHILE(oo<25) fvRead(8); INCR(oo); ENDWHILE
+        f=fvRead(8); ADD(f, fvRead(8)*256); /* LEN: length of file name */
+        o=fvRead(8); ADD(o, fvRead(8)*256); /* XLN: length of extra field */
+        q=fvRead(8); ADD(q, fvRead(8)*256); /* CML: length of file comment */
+        oo=0; WHILE(oo<12) fvRead(8); INCR(oo); ENDWHILE
+        WHILE(f!=0) fvRead(8); DECR(f); ENDWHILE /* file name */
+        WHILE(o!=0) fvRead(8); DECR(o); ENDWHILE /* extra field */
+        WHILE(q!=0) fvRead(8); DECR(q); ENDWHILE /* file comment */
+      ENDIF /* IF ZIP structure sub-type */
+    ELSE /* gzip/RFC 1952 format */
+      /* fprintf(stderr,"gzip!\n"); */
+      ty=FMT_GZIP;
+      /* The most simple gzip header (10 bytes): 
+       * ID1   hex 0x1f
+       * ID2   hex 0x8b
+       * CM    hex 0x08
+       * FLG   hex 0x00
+       * MTIME hex 0x00, 0x00, 0x00, 0x00 (1 Jan 1970, UNIX epoch)
+       * XFL   hex 0x00
+       * OS    hex 0xff
+       * After that comes the compressed data stream.
+       * After that comes hte CRC32 and ISIZE (byte aligned? ?)
+       */
+      fvRead(16); /* ignore ID2 and CM */
+      o = fvRead(8); /* FLG */
+#if 0
+        fvRead(8); fvRead(16); /* ignore fvRead(24); */
+        fvRead(8); fvRead(16); /* fvRead(24); */
+#else
+        fvRead(16); fvRead(16); /* ignore MTIME */
+        fvRead(8); /* ignore XFL */
+        fvRead(8); /* ignore OS */
+#endif
+#ifndef CFG_INPUT_RFC /* CFG_INPUT_FILE */
+      IF(TAND_P(o,2)) /* GCONT: skip part number of continuation */
+        fvRead(16);
+      ENDIF
+#endif      
+      IF(TAND_P(o,4)) /* ignore FEXTRA */
+        q=fvRead(16);
+        WHILE(q!=0) fvRead(8); DECR(q); ENDWHILE
+      ENDIF
+      IF(TAND_P(o,8))
+        WHILE(0!=fvRead(8))
+          PASS;
+        ENDWHILE
+      ENDIF /* ignore FNAME */
+      IF(TAND_P(o,16))
+        WHILE(0!=fvRead(8))
+          PASS;
+        ENDWHILE
+      ENDIF /* ignore FCOMMENT */
+#ifdef CFG_INPUT_RFC 
+      IF(TAND_P(o,2)) fvRead(16); ENDIF /* ignore FHCRC */
+#else /* CFG_INPUT_FILE */
+      IF(TAND_P(o,32)) /* skip encryption header */
+        f=0; WHILE(f<12) fvRead(8); INCR(f); ENDWHILE
+      ENDIF
+#endif
+    ENDIF /* IF file format */
+    /* fprintf(stderr,"ty=%d\n", ty); */
+    IF(ty==FMT_ZIP_STORED)
+      /* fprintf(stderr,"oo=%d ooo=%d\n", oo, ooo); */
+      WHILE(oo!=0) my_putchar(my_getchar()); DECR(oo); ENDWHILE
+      WHILE(ooo!=0)
+        my_putchar(my_getchar());
+        oo=16384*4-1; /* avoid conflict with large numerical constants */
+        WHILE(oo!=0) my_putchar(my_getchar()); DECR(oo); ENDWHILE
+        DECR(ooo);
+      ENDWHILE
+    ELSE_IF(ty==FMT_STOP)
+    ELSE_IF(ty!=FMT_NONE)
+#endif
+  o = 0;
+  WHILE(o==0)
+    o = fvRead(1); /* BFINAL: 1 iff this is the last data block */
+    q = fvRead(2); /* BTYPE: block type; 0=stored, 1=fixed Huff, 2=dyn Huff */
+    IF(0!=q)
+     /**
+      * Now: q==BTYPE, q==1 or q==2. (BTYPE==3 means error). Handles
+      * compressed data blocks, see subsubsection 3.2.5 of RFC 1951.
+      */
+#if 0 /* obsolete */
+      IF(TAND_1(q)) /* inline: fv(..., 8); */
+#else
+      IF(q==1)
+#endif      
+      /**
+       * Initializes the fixed Huffman codes for BTYPE==1.
+       */
+        /* WORD oo; */
+        oo=288;
+        WHILE(oo!=0)
+          DECR(oo);
+          /* AREF(Z,oo) = oo < 144 ? 8
+                : oo < 256 ? 9
+                : oo < 280 ? 7
+                : 8; */
+#if 0
+            if (144<=oo && oo<256) AREF(Z,oo)=9;
+            else if (256<=oo && oo<280) AREF(Z,oo)=7;
+            else AREF(Z,oo)=8;
+#else /* this doesn't require && */
+            IF(oo < 144)
+              AREF(Z,oo)=8;
+            ELSE_IF(oo < 256)
+              AREF(Z,oo)=9;
+            ELSE_IF(oo < 280)
+              AREF(Z,oo)=7;
+            ELSE
+              AREF(Z,oo)=8;
+            ENDIF
+#endif
+        ENDWHILE
+        v=fvMktree(288);
+#if SMALLEST_CODE
+        f=0; WHILE(f<32) AREF(Z,f)=5; INCR(f); ENDWHILE
+#else
+        AREF(Z, 0)=5; AREF(Z, 1)=5; AREF(Z, 2)=5; AREF(Z, 3)=5; AREF(Z, 4)=5; AREF(Z, 5)=5; AREF(Z, 6)=5; AREF(Z, 7)=5;
+        AREF(Z, 8)=5; AREF(Z, 9)=5; AREF(Z,10)=5; AREF(Z,11)=5; AREF(Z,12)=5; AREF(Z,13)=5; AREF(Z,14)=5; AREF(Z,15)=5;
+        AREF(Z,16)=5; AREF(Z,17)=5; AREF(Z,18)=5; AREF(Z,19)=5; AREF(Z,20)=5; AREF(Z,21)=5; AREF(Z,22)=5; AREF(Z,23)=5;
+        AREF(Z,24)=5; AREF(Z,25)=5; AREF(Z,26)=5; AREF(Z,27)=5; AREF(Z,28)=5; AREF(Z,29)=5; AREF(Z,30)=5; AREF(Z,31)=5;
+#endif
+        h=fvMktree(32);
+#if 0 /* obsolete */
+      ENDIF IF(TAND_P(q,2)) /* inline: fv(..., 9); */
+#else
+      ELSE
+#endif            
+      /**
+       * Reads dynamic Huffman codes for BTYPE==2.
+       */
+        /* WORD oo, ooo, oooo, f, p, x, v; */
+        p = fvRead(5) + 257; /* HLIT: 257..286 (287--289 are unused) */
+        x = fvRead(5) + 1; /* HDIST: 1..32 */
+        v = fvRead(4) + 4; /* HCLEN: 4..19 */ /* small v */
+        oo = 0;
+        WHILE(oo < v)  AREF(Z,AREF(constW,oo)) = fvRead(3); INCR(oo); ENDWHILE /* small v */
+        WHILE(oo < 19) AREF(Z,AREF(constW,oo)) = 0; INCR(oo); ENDWHILE
+        v=fvMktree(19);
+        ooo=0;
+        oo=0;
+        WHILE(oo < p + x)
+          oooo = fvDescend(v);
+          /* f = o == 16 ? ((o = ooo), 3 + fvRead(2))
+               : o == 17 ? ((o = 0), 3 + fvRead(3))
+               : o == 18 ? ((o = 0), 11 + fvRead(7))
+               : ((ooo = o), 1); */
+          IF(oooo==16)
+            oooo=ooo; f=3+fvRead(2);
+          ELSE_IF(oooo==17)
+            oooo=0; f=3+fvRead(3);
+          ELSE_IF(oooo==18)
+            oooo=0; f=11+fvRead(7);
+          ELSE
+            ooo=oooo; f=1;
+          ENDIF
+          q=f;
+          WHILE(q!=0) AREF(Z,oo) = oooo; INCR(oo); DECR(q); ENDWHILE
+        ENDWHILE
+        fvFree(v);
+        v=fvMktree(p);
+        oo=x;
+        WHILE(oo!=0) DECR(oo); AREF(Z,oo) = AREF(Z,oo + p); ENDWHILE
+        h=fvMktree(x);
+      ENDIF
+    /**
+     * Uncompresses the data block with the Huffman codes set up.
+     */
+      /* inline: fv(..., 6); */
+      /* WORD oo, f; */
+      oo=fvDescend(v);
+      WHILE(oo != 256)
+        IF(256 < oo)
+          SUB(oo,257);
+          f = AREF(constU,oo) + fvRead(AREF(constP,oo));
+          oo = fvDescend(h);
+          oo = AREF(constQ,oo) + fvRead(AREF(constL,oo));
+          /* oo = oo <= T ? T - oo : 32768 - oo + T; */
+          IF(T<oo)
+            oo=32768-oo+T;
+          ELSE
+            oo=T-oo;
+          ENDIF
+          WHILE(f!=0)
+            fvWrite(AREF(S,oo));
+            SLIDE(oo); /* oo++; oo&=32767; */ /* oo %= 32768; */
+            DECR(f);
+          ENDWHILE
+        ELSE
+          fvWrite(oo);
+        ENDIF
+        oo=fvDescend(v);
+      ENDWHILE
+      fvFree(v);
+      fvFree(h);
+    ELSE /* inline: fv(..., 7); */
+    /**
+     * Copies a block of input to output (mostly) verbatim. This is for
+     * BTYPE==0, non-compressed block, subsubsection 3.2.4 of RFC 1951.
+     * (We need non-compressed because
+     * some blocks cannot be compressed effectively, so gzip inserts them
+     * as is.)
+     * @whichcode 7
+     */
+      /* WORD oo; */
+      fvRead(AND_7(Y)); /* skip till we reach byte boundary */
+      oo=fvRead(16); /* length of block */
+      /* fprintf(stderr, "BLK %d\n", oo&0xffff); */
+      fvRead(16); /* one's complement of length; ignored */
+      WHILE(oo!=0) fvWrite(fvRead(8)); DECR(oo); ENDWHILE
+    ENDIF
+  ENDWHILE
+#if 0
+    /* we don't need this because T and C are already in [0..32767) */
+    T&=32767; C&=32767; /* T%=32768; C%=32768; */
+#endif
+  WHILE(C!=T)
+    my_putchar(AREF(S,C));
+    SLIDE(C); /* C++; C&=32767; */ /* C%=32768; */
+  ENDWHILE
+#ifdef CFG_INPUT_RAW
+#else
+  ENDIF /* IF */
+#endif
+#ifdef CFG_MULTIPLE
+#ifdef CFG_INPUT_RAW
+#else
+  IF(ty==FMT_GZIP)
+    /* CRC32 and ISIZE remaining */
+    fvRead(16); fvRead(16); fvRead(16); fvRead(16);
+  ELSE_IF(ty==FMT_ZLIB)
+    /* ADLER32 remaining */
+    fvRead(16); fvRead(16);
+  ENDIF
+#endif
+  ENDWHILE /* outermost WHILE loop */
+#else
+  /* vvv this works for both signed and unsigned, 16 bit and 32 bit */
+  WHILE(TNAND_P(512+my_getchar(),256)) ENDWHILE /* read whole input to avoid `Broken pipe' messages */
+  /* ^^^ corrected bug: [0..255] */
+#endif
+  RETURN_VOID;
+ENDFUN
+
+ENDDOT
+ENDDOT2

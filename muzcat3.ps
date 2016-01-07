@@ -1,0 +1,246 @@
+%
+% muzcat3.ps -- a gzip/zip/Flate uncompressor in PostScript LanguageLevel1
+% written by pts@fazekas.hu at Sat Jul 28 22:50:55 CEST 2001
+%
+% Sample usage:
+%
+%        gs -dNODISPLAY -q muzcat3.ps <test_file.gz >test_file
+%        gs -dNODISPLAY -q muzcat3.ps <test_file.zip >test_file
+%        gs -dNODISPLAY -q muzcat3.ps <test_file.flate >test_file
+%
+% You may pass the concatenation of any number of input files, in multiple
+% formats on STDIN.
+%
+% Note that the program is quite slow: it is about 2500 times slower
+% than zcat(1) or gunzip(1), and about 1600 times slower than gs5.50's
+% /FlateDecode filter. However, this implementation is extremely portable: it
+% works on any compliant PostScript interpreter since 1985.
+%
+% VM usage: 337039 bytes with gs5.50.
+%
+% For more information about the features of this program, download
+%
+%	http://www.inf.bme.hu/~pts/muzcat-latest.tar.gz
+%
+/Codes [{} {} {-302 0 exch} {1} {0 0 Ram exch get ne {5} {17} ifelse} {160
+Ram exch get 7 add 0 Ram exch get lt {6} {8} ifelse} {159 159 Ram exch get 0
+0 exch} {256 mod 1 160 Ram exch get add Ram exch get mul add Ram 3 1 roll
+put 160 160 Ram exch get 8 add Ram 3 1 roll put 8} {160 Ram exch get 0 Ram
+exch get lt {9} {14} ifelse} {517 0 0 exch} {256 mod Ram 3 1 roll put 0 Ram
+exch get 16 eq {11} {12} ifelse} {516 159 Ram exch get 517 Ram exch get 1 16
+160 Ram exch get sub add Ram exch get mod 1 160 Ram exch get add Ram exch
+get mul add Ram 3 1 roll put 159 517 Ram exch get 1 16 160 Ram exch get sub
+add Ram exch get idiv Ram 3 1 roll put 13} {516 159 Ram exch get 517 Ram
+exch get 1 160 Ram exch get add Ram exch get mul add 1 0 Ram exch get add
+Ram exch get mod Ram 3 1 roll put 159 517 Ram exch get 1 0 Ram exch get 160
+Ram exch get sub add Ram exch get idiv Ram 3 1 roll put 13} {160 160 Ram
+exch get 8 0 Ram exch get sub add Ram 3 1 roll put 15} {516 159 Ram exch get
+1 0 Ram exch get add Ram exch get mod Ram 3 1 roll put 160 160 Ram exch get
+0 Ram exch get sub Ram 3 1 roll put 159 159 Ram exch get 1 0 Ram exch get
+add Ram exch get idiv 1 160 Ram exch get add Ram exch get mod Ram 3 1 roll
+put 15} {516 Ram exch get 2} {bad 17} {0 2} {515 19 Ram exch get
+Ram 3 1 roll put 19 533 515 Ram exch get add Ram exch get Ram 3 1 roll put
+533 515 Ram exch get add 0 Ram 3 1 roll put 515 Ram exch get 2} {0 0 Ram
+exch get ne {20} {23} ifelse} {-19 533 0 Ram exch get add Ram exch get exch}
+{pop -19 533 0 Ram exch get 1 add add Ram exch get exch} {pop 533 0 Ram exch
+get 1 add add 0 Ram 3 1 roll put 533 0 Ram exch get 2 add add 0 Ram 3 1 roll
+put 533 0 Ram exch get add 19 Ram exch get Ram 3 1 roll put 19 0 Ram exch
+get Ram 3 1 roll put 23} {0 2} {0 533 0 Ram exch get add Ram exch get ne
+{25} {30} ifelse} {0 -4 1 exch} {ne {27} {28} ifelse} {0 533 0 Ram exch get
+1 add add Ram exch get Ram 3 1 roll put 29} {0 533 0 Ram exch get add Ram
+exch get Ram 3 1 roll put 29} {24} {533 0 Ram exch get 2 add add Ram exch
+get 2} {518 0 Ram 3 1 roll put 32} {518 Ram exch get 17 lt {33} {34} ifelse}
+{481 518 Ram exch get add 0 Ram 3 1 roll put 518 Ram exch dup Ram exch get 1
+add put 0 pop 32} {518 0 Ram 3 1 roll put 35} {518 Ram exch get 0 Ram exch
+get lt {36} {37} ifelse} {481 161 518 Ram exch get add Ram exch get add Ram
+exch dup Ram exch get 1 add put 0 pop 518 Ram exch dup Ram exch get 1 add
+put 0 pop 35} {481 0 add 0 Ram 3 1 roll put 498 0 add 0 Ram 3 1 roll put 518
+0 Ram 3 1 roll put 38} {518 Ram exch get 16 lt {39} {40} ifelse} {498 518
+Ram exch get 1 add add 498 518 Ram exch get add Ram exch get 481 518 Ram
+exch get add Ram exch get add 2 mul Ram 3 1 roll put 518 Ram exch dup Ram
+exch get 1 add put 0 pop 38} {533 3 add 0 Ram 3 1 roll put 518 0 Ram 3 1
+roll put 41} {518 Ram exch get 0 Ram exch get lt {42} {55} ifelse} {0 161
+518 Ram exch get add Ram exch get ne {43} {54} ifelse} {519 498 161 518 Ram
+exch get add Ram exch get add Ram exch get Ram 3 1 roll put 498 161 518 Ram
+exch get add Ram exch get add Ram exch dup Ram exch get 1 add put 0 pop 521
+3 Ram 3 1 roll put 520 161 518 Ram exch get add Ram exch get Ram 3 1 roll
+put 44} {520 Ram exch get 0 ne {45} {52} ifelse} {520 Ram exch dup Ram exch
+get 1 sub put 0 pop 533 521 Ram exch get add Ram exch get 0 eq {46} {48}
+ifelse} {533 521 Ram exch get add -18 0 exch} {Ram 3 1 roll put 48} {0 519
+Ram exch get 1 1 520 Ram exch get add Ram exch get mul idiv 2 mod ne {49}
+{50} ifelse} {521 533 521 Ram exch get add Ram exch get 1 add Ram 3 1 roll
+put 51} {521 533 521 Ram exch get add Ram exch get 0 add Ram 3 1 roll put
+51} {44} {533 521 Ram exch get add -18 0 exch} {Ram 3 1 roll put 533 533 521
+Ram exch get add Ram exch get 2 add add 518 Ram exch get Ram 3 1 roll put
+54} {518 Ram exch dup Ram exch get 1 add put 0 pop 41} {533 3 add Ram exch
+get 2} {2531 158 Ram exch get add 0 Ram exch get Ram 3 1 roll put 158 Ram
+exch get 32767 eq {57} {58} ifelse} {158 0 Ram 3 1 roll put 59} {158 Ram
+exch dup Ram exch get 1 add put 0 pop 59} {158 Ram exch get 157 Ram exch get
+eq {60} {64} ifelse} {-1 2531 157 Ram exch get add Ram exch get exch} {pop
+157 Ram exch get 32767 eq {62} {63} ifelse} {157 0 Ram 3 1 roll put 64} {157
+Ram exch dup Ram exch get 1 add put 0 pop 64} {0 2} {1 2 lt {66} {301}
+ifelse} {525 0 Ram 3 1 roll put 526 0 Ram 3 1 roll put 159 0 Ram 3 1 roll
+put 160 0 Ram 3 1 roll put 157 0 Ram 3 1 roll put 158 0 Ram 3 1 roll put 530
+0 Ram 3 1 roll put 531 0 Ram 3 1 roll put 533 0 add 0 Ram 3 1 roll put 533 1
+add 0 Ram 3 1 roll put 533 2 add 0 Ram 3 1 roll put 533 3 add 0 Ram 3 1 roll
+put 533 4 add 0 Ram 3 1 roll put 533 5 add 0 Ram 3 1 roll put 19 6 Ram 3 1
+roll put 522 19 Ram exch get Ram 3 1 roll put 67} {522 Ram exch get 1998 lt
+{68} {69} ifelse} {533 522 Ram exch get add 522 Ram exch get 3 add Ram 3 1
+roll put 522 Ram exch dup Ram exch get 1 add put 0 pop 533 522 Ram exch get
+add 0 Ram 3 1 roll put 522 Ram exch dup Ram exch get 1 add put 0 pop 533 522
+Ram exch get add 0 Ram 3 1 roll put 522 Ram exch dup Ram exch get 1 add put
+0 pop 67} {524 0 0 exch} {Ram 3 1 roll put 0 512 524 Ram exch get add 256
+idiv 2 mod ne {71} {73} ifelse} {0 2} {179} {524 Ram exch get 120 eq {74}
+{76} ifelse} {-4 8 exch} {pop 524 1 Ram 3 1 roll put 179} {524 Ram exch get
+80 eq {77} {151} ifelse} {-4 8 exch} {pop 522 -4 8 exch} {Ram 3 1 roll put
+524 3 Ram 3 1 roll put 522 Ram exch get 3 eq {80} {107} ifelse} {-4 8 exch}
+{pop -4 16 exch} {pop -4 16 exch} {pop 524 -4 8 exch} {Ram 3 1 roll put -4 8
+exch} {pop -4 16 exch} {pop -4 16 exch} {pop -4 16 exch} {pop -4 16 exch}
+{pop 525 -4 8 exch} {Ram 3 1 roll put 525 525 Ram exch get -4 8 exch} {256
+mul add Ram 3 1 roll put 526 -4 8 exch} {Ram 3 1 roll put 526 526 Ram exch
+get -4 8 exch} {256 mul add Ram 3 1 roll put -4 16 exch} {pop -4 16 exch}
+{pop 528 -4 8 exch} {Ram 3 1 roll put 528 528 Ram exch get -4 8 exch} {256
+mul add Ram 3 1 roll put 523 -4 8 exch} {Ram 3 1 roll put 523 523 Ram exch
+get -4 8 exch} {256 mul add Ram 3 1 roll put 100} {528 Ram exch get 0 ne
+{101} {103} ifelse} {-4 8 exch} {pop 528 Ram exch dup Ram exch get 1 sub put
+0 pop 100} {523 Ram exch get 0 ne {104} {106} ifelse} {-4 8 exch} {pop 523
+Ram exch dup Ram exch get 1 sub put 0 pop 103} {150} {522 Ram exch get 7 eq
+{108} {114} ifelse} {522 0 Ram 3 1 roll put 109} {522 Ram exch get 12 lt
+{110} {112} ifelse} {-4 8 exch} {pop 522 Ram exch dup Ram exch get 1 add put
+0 pop 109} {522 -4 8 exch} {Ram 3 1 roll put 150} {522 Ram exch get 5 eq
+{115} {126} ifelse} {522 0 Ram 3 1 roll put 116} {522 Ram exch get 17 lt
+{117} {119} ifelse} {-4 8 exch} {pop 522 Ram exch dup Ram exch get 1 add put
+0 pop 116} {522 -4 8 exch} {Ram 3 1 roll put 522 522 Ram exch get -4 8 exch}
+{256 mul add Ram 3 1 roll put 122} {522 Ram exch get 0 ne {123} {125}
+ifelse} {-4 8 exch} {pop 522 Ram exch dup Ram exch get 1 sub put 0 pop 122}
+{150} {522 Ram exch get 1 eq {127} {150} ifelse} {525 0 Ram 3 1 roll put
+128} {525 Ram exch get 25 lt {129} {131} ifelse} {-4 8 exch} {pop 525 Ram
+exch dup Ram exch get 1 add put 0 pop 128} {528 -4 8 exch} {Ram 3 1 roll put
+528 528 Ram exch get -4 8 exch} {256 mul add Ram 3 1 roll put 522 -4 8 exch}
+{Ram 3 1 roll put 522 522 Ram exch get -4 8 exch} {256 mul add Ram 3 1 roll
+put 523 -4 8 exch} {Ram 3 1 roll put 523 523 Ram exch get -4 8 exch} {256
+mul add Ram 3 1 roll put 525 0 Ram 3 1 roll put 138} {525 Ram exch get 12 lt
+{139} {141} ifelse} {-4 8 exch} {pop 525 Ram exch dup Ram exch get 1 add put
+0 pop 138} {528 Ram exch get 0 ne {142} {144} ifelse} {-4 8 exch} {pop 528
+Ram exch dup Ram exch get 1 sub put 0 pop 141} {522 Ram exch get 0 ne {145}
+{147} ifelse} {-4 8 exch} {pop 522 Ram exch dup Ram exch get 1 sub put 0 pop
+144} {523 Ram exch get 0 ne {148} {150} ifelse} {-4 8 exch} {pop 523 Ram
+exch dup Ram exch get 1 sub put 0 pop 147} {179} {524 2 Ram 3 1 roll put -4
+16 exch} {pop 522 -4 8 exch} {Ram 3 1 roll put -4 16 exch} {pop -4 16 exch}
+{pop -4 8 exch} {pop -4 8 exch} {pop 0 522 Ram exch get 2 idiv 2 mod ne
+{158} {160} ifelse} {-4 16 exch} {pop 160} {0 522 Ram exch get 4 idiv 2 mod
+ne {161} {166} ifelse} {523 -4 16 exch} {Ram 3 1 roll put 163} {523 Ram exch
+get 0 ne {164} {166} ifelse} {-4 8 exch} {pop 523 Ram exch dup Ram exch get
+1 sub put 0 pop 163} {0 522 Ram exch get 8 idiv 2 mod ne {167} {170} ifelse}
+{0 -4 8 exch} {ne {169} {170} ifelse} {167} {0 522 Ram exch get 16 idiv 2
+mod ne {171} {174} ifelse} {0 -4 8 exch} {ne {173} {174} ifelse} {171} {0
+522 Ram exch get 32 idiv 2 mod ne {175} {179} ifelse} {528 0 Ram 3 1 roll
+put 176} {528 Ram exch get 12 lt {177} {179} ifelse} {-4 8 exch} {pop 528
+Ram exch dup Ram exch get 1 add put 0 pop 176} {524 Ram exch get 0 eq {180}
+{194} ifelse} {525 Ram exch get 0 ne {181} {184} ifelse} {-1 0 0 exch}
+{exch} {pop 525 Ram exch dup Ram exch get 1 sub put 0 pop 180} {526 Ram exch
+get 0 ne {185} {193} ifelse} {-1 0 0 exch} {exch} {pop 525 16384 4 mul 1 sub
+Ram 3 1 roll put 188} {525 Ram exch get 0 ne {189} {192} ifelse} {-1 0 0
+exch} {exch} {pop 525 Ram exch dup Ram exch get 1 sub put 0 pop 188} {526
+Ram exch dup Ram exch get 1 sub put 0 pop 184} {290} {524 Ram exch get 3 ne
+{195} {290} ifelse} {522 0 Ram 3 1 roll put 196} {522 Ram exch get 0 eq
+{197} {284} ifelse} {522 -4 1 exch} {Ram 3 1 roll put 523 -4 2 exch} {Ram 3
+1 roll put 0 523 Ram exch get ne {200} {275} ifelse} {523 Ram exch get 1 eq
+{201} {217} ifelse} {525 288 Ram 3 1 roll put 202} {525 Ram exch get 0 ne
+{203} {211} ifelse} {525 Ram exch dup Ram exch get 1 sub put 0 pop 525 Ram
+exch get 144 lt {204} {205} ifelse} {161 525 Ram exch get add 8 Ram 3 1 roll
+put 210} {525 Ram exch get 256 lt {206} {207} ifelse} {161 525 Ram exch get
+add 9 Ram 3 1 roll put 210} {525 Ram exch get 280 lt {208} {209} ifelse}
+{161 525 Ram exch get add 7 Ram 3 1 roll put 210} {161 525 Ram exch get add
+8 Ram 3 1 roll put 210} {202} {530 -31 288 exch} {Ram 3 1 roll put 528 0 Ram
+3 1 roll put 213} {528 Ram exch get 32 lt {214} {215} ifelse} {161 528 Ram
+exch get add 5 Ram 3 1 roll put 528 Ram exch dup Ram exch get 1 add put 0
+pop 213} {531 -31 32 exch} {Ram 3 1 roll put 251} {529 -4 5 exch} {257 add
+Ram 3 1 roll put 532 -4 5 exch} {1 add Ram 3 1 roll put 530 -4 4 exch} {4
+add Ram 3 1 roll put 525 0 Ram 3 1 roll put 221} {525 Ram exch get 530 Ram
+exch get lt {222} {224} ifelse} {161 20 525 Ram exch get add Ram exch get
+add -4 3 exch} {Ram 3 1 roll put 525 Ram exch dup Ram exch get 1 add put 0
+pop 221} {525 Ram exch get 19 lt {225} {226} ifelse} {161 20 525 Ram exch
+get add Ram exch get add 0 Ram 3 1 roll put 525 Ram exch dup Ram exch get 1
+add put 0 pop 224} {530 -31 19 exch} {Ram 3 1 roll put 526 0 Ram 3 1 roll
+put 525 0 Ram 3 1 roll put 228} {525 Ram exch get 529 Ram exch get 532 Ram
+exch get add lt {229} {244} ifelse} {527 -24 530 Ram exch get exch} {Ram 3 1
+roll put 527 Ram exch get 16 eq {231} {233} ifelse} {527 526 Ram exch get
+Ram 3 1 roll put 528 3 -4 2 exch} {add Ram 3 1 roll put 240} {527 Ram exch
+get 17 eq {234} {236} ifelse} {527 0 Ram 3 1 roll put 528 3 -4 3 exch} {add
+Ram 3 1 roll put 240} {527 Ram exch get 18 eq {237} {239} ifelse} {527 0 Ram
+3 1 roll put 528 11 -4 7 exch} {add Ram 3 1 roll put 240} {526 527 Ram exch
+get Ram 3 1 roll put 528 1 Ram 3 1 roll put 240} {523 528 Ram exch get Ram 3
+1 roll put 241} {523 Ram exch get 0 ne {242} {243} ifelse} {161 525 Ram exch
+get add 527 Ram exch get Ram 3 1 roll put 525 Ram exch dup Ram exch get 1
+add put 0 pop 523 Ram exch dup Ram exch get 1 sub put 0 pop 241} {228} {-19
+530 Ram exch get exch} {pop 530 -31 529 Ram exch get exch} {Ram 3 1 roll put
+525 532 Ram exch get Ram 3 1 roll put 247} {525 Ram exch get 0 ne {248}
+{249} ifelse} {525 Ram exch dup Ram exch get 1 sub put 0 pop 161 525 Ram
+exch get add 161 525 Ram exch get 529 Ram exch get add add Ram exch get Ram
+3 1 roll put 247} {531 -31 532 Ram exch get exch} {Ram 3 1 roll put 251}
+{525 -24 530 Ram exch get exch} {Ram 3 1 roll put 253} {525 Ram exch get 256
+ne {254} {272} ifelse} {256 525 Ram exch get lt {255} {268} ifelse} {525 525
+Ram exch get 257 sub Ram 3 1 roll put 528 39 525 Ram exch get add Ram exch
+get -4 68 525 Ram exch get add Ram exch get exch} {add Ram 3 1 roll put 525
+-24 531 Ram exch get exch} {Ram 3 1 roll put 525 97 525 Ram exch get add Ram
+exch get -4 127 525 Ram exch get add Ram exch get exch} {add Ram 3 1 roll
+put 158 Ram exch get 525 Ram exch get lt {259} {260} ifelse} {525 32768 525
+Ram exch get sub 158 Ram exch get add Ram 3 1 roll put 261} {525 158 Ram
+exch get 525 Ram exch get sub Ram 3 1 roll put 261} {528 Ram exch get 0 ne
+{262} {267} ifelse} {-56 2531 525 Ram exch get add Ram exch get exch} {pop
+525 Ram exch get 32767 eq {264} {265} ifelse} {525 0 Ram 3 1 roll put 266}
+{525 Ram exch dup Ram exch get 1 add put 0 pop 266} {528 Ram exch dup Ram
+exch get 1 sub put 0 pop 261} {270} {-56 525 Ram exch get exch} {pop 270}
+{525 -24 530 Ram exch get exch} {Ram 3 1 roll put 253} {-19 530 Ram exch get
+exch} {pop -19 531 Ram exch get exch} {pop 283} {-4 160 Ram exch get 8 mod
+exch} {pop 525 -4 16 exch} {Ram 3 1 roll put -4 16 exch} {pop 279} {525 Ram
+exch get 0 ne {280} {283} ifelse} {-56 -4 8 exch} {exch} {pop 525 Ram exch
+dup Ram exch get 1 sub put 0 pop 279} {196} {157 Ram exch get 158 Ram exch
+get ne {285} {290} ifelse} {-1 2531 157 Ram exch get add Ram exch get exch}
+{pop 157 Ram exch get 32767 eq {287} {288} ifelse} {157 0 Ram 3 1 roll put
+289} {157 Ram exch dup Ram exch get 1 add put 0 pop 289} {284} {524 Ram exch
+get 2 eq {291} {296} ifelse} {-4 16 exch} {pop -4 16 exch} {pop -4 16 exch}
+{pop -4 16 exch} {pop 300} {524 Ram exch get 1 eq {297} {300} ifelse} {-4 16
+exch} {pop -4 16 exch} {pop 300} {65} {0 2} {17 1 Ram 3 1 roll put 18 0 Ram
+3 1 roll put 303} {18 Ram exch get 30 lt {304} {305} ifelse} {97 18 Ram exch
+get add 17 Ram exch get 1 add Ram 3 1 roll put 18 Ram exch dup Ram exch get
+1 add put 0 pop 97 18 Ram exch get add 17 Ram exch get 3 mul 2 idiv 1 add
+Ram 3 1 roll put 18 Ram exch dup Ram exch get 1 add put 0 pop 17 17 Ram exch
+get 2 mul Ram 3 1 roll put 303} {97 0 add 1 Ram 3 1 roll put 17 1 Ram 3 1
+roll put 18 0 Ram 3 1 roll put 306} {18 Ram exch get 16 lt {307} {308}
+ifelse} {1 18 Ram exch get add 17 Ram exch get Ram 3 1 roll put 18 Ram exch
+dup Ram exch get 1 add put 0 pop 17 17 Ram exch get 2 mul Ram 3 1 roll put
+306} {18 0 Ram 3 1 roll put 309} {18 Ram exch get 30 lt {310} {311} ifelse}
+{127 18 Ram exch get add 18 Ram exch get 2 idiv 1 sub Ram 3 1 roll put 18
+Ram exch dup Ram exch get 1 add put 0 pop 309} {127 0 add 0 Ram 3 1 roll put
+127 1 add 0 Ram 3 1 roll put 39 0 add 3 Ram 3 1 roll put 39 1 add 4 Ram 3 1
+roll put 39 2 add 5 Ram 3 1 roll put 39 3 add 6 Ram 3 1 roll put 39 4 add 7
+Ram 3 1 roll put 39 5 add 8 Ram 3 1 roll put 39 6 add 9 Ram 3 1 roll put 39
+7 add 10 Ram 3 1 roll put 39 8 add 11 Ram 3 1 roll put 39 9 add 13 Ram 3 1
+roll put 39 10 add 15 Ram 3 1 roll put 39 11 add 17 Ram 3 1 roll put 39 12
+add 19 Ram 3 1 roll put 39 13 add 23 Ram 3 1 roll put 39 14 add 27 Ram 3 1
+roll put 39 15 add 31 Ram 3 1 roll put 39 16 add 35 Ram 3 1 roll put 39 17
+add 43 Ram 3 1 roll put 39 18 add 51 Ram 3 1 roll put 39 19 add 59 Ram 3 1
+roll put 39 20 add 67 Ram 3 1 roll put 39 21 add 83 Ram 3 1 roll put 39 22
+add 99 Ram 3 1 roll put 39 23 add 115 Ram 3 1 roll put 39 24 add 131 Ram 3 1
+roll put 39 25 add 163 Ram 3 1 roll put 39 26 add 195 Ram 3 1 roll put 39 27
+add 227 Ram 3 1 roll put 39 28 add 258 Ram 3 1 roll put 20 0 add 16 Ram 3 1
+roll put 20 1 add 17 Ram 3 1 roll put 20 2 add 18 Ram 3 1 roll put 20 3 add
+0 Ram 3 1 roll put 20 4 add 8 Ram 3 1 roll put 20 5 add 7 Ram 3 1 roll put
+20 6 add 9 Ram 3 1 roll put 20 7 add 6 Ram 3 1 roll put 20 8 add 10 Ram 3 1
+roll put 20 9 add 5 Ram 3 1 roll put 20 10 add 11 Ram 3 1 roll put 20 11 add
+4 Ram 3 1 roll put 20 12 add 12 Ram 3 1 roll put 20 13 add 3 Ram 3 1 roll
+put 20 14 add 13 Ram 3 1 roll put 20 15 add 2 Ram 3 1 roll put 20 16 add 14
+Ram 3 1 roll put 20 17 add 1 Ram 3 1 roll put 20 18 add 15 Ram 3 1 roll put
+18 0 Ram 3 1 roll put 17 0 Ram 3 1 roll put 312} {18 Ram exch get 28 lt
+{313} {316} ifelse} {18 Ram exch get 4 eq {314} {315} ifelse} {17 1 Ram 3 1
+roll put 315} {68 18 Ram exch get add 18 Ram exch get 4 idiv 17 Ram exch get
+sub Ram 3 1 roll put 18 Ram exch dup Ram exch get 1 add put 0 pop 312} {68
+28 add 0 Ram 3 1 roll put -65 0 exch} {pop 0 2}] bind def /Ram 36000 array
+def /Ip 2 def /Stdin (%stdin) (r) file def /Stdout (%stdout) (w) file def
+{Codes Ip get exec dup -1 lt {neg Ram 0 get Ip 1 add 4 2 roll /Ip exch def
+Ram exch 0 exch put} {dup 2 gt {/Ip exch def} {/Ip Ip 1 add def dup 0 eq
+{pop pop Stdin read not {-1} if} {dup -1 eq {pop Stdout exch write 0} {dup 1
+eq {pop pop exit} {pop 3 1 roll /Ip exch def Ram exch 0 exch put} ifelse}
+ifelse} ifelse} ifelse} ifelse} bind loop quit

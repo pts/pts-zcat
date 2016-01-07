@@ -1,0 +1,915 @@
+% statecat.psm -- a stateful, faster minimalistic zcat (gzip -cd)
+%   implementation, implemented in pure PostScript LanguageLevel1 (Run
+%   through cpp (C preprocessor) to get the PostScript file
+%
+% originally rcm.c
+% original author: Ron McFarland <rcm@one.net>, 1996
+% formally muzcat.c (at Tue Dec 25 11:07:47 CET 2001)
+% based on statecat.ps.3
+% rewritten, restructured and extended by pts@fazekas.hu at
+% Tue Dec 25 21:00:33 CET 2001
+%
+%
+% Imp: measure size of StateCatDict
+% Imp: shorter operator names (i.e `E' for `def', as in test_vm_eps.eps)
+% Imp: shorter var names (such as `preread', `past')
+% Imp: make global vars numbered, not named...
+% Imp: make constU[]-3 a string, not an array
+% Imp: make constW, constP, constL strings, not arrays
+% Imp: inline all except fvMktree (too long), fvFree (recursive) and fvWork (too long)
+% Imp: verify currentdict
+% Imp: constM or 1<< is faster??
+%
+
+20 dict dup /StateCatDict exch def begin
+
+#define NULL 0
+#define NODESIZE 1998 /* NODESIZE%3==0 */
+
+#define ASET(aname,idx,b) aname idx b put
+#define AREF(aname,idx) aname idx get
+#define PASS
+#define GLOBAL_VAR(t,name) /name 0 def
+#define SLOCAL_VAR(t,name) /name 0 def
+#define GLOBAL_ARRAY(t,name,size) /name size t def
+#define LOCAL_VAR(a,b)
+
+#if NDEBUG
+  #define ASSERT_TRUE_POP(str) pop
+  #define ASSERT_FALSE_POP(str) pop
+  #define ASSERT_TRUE(what,str)
+#else
+  /InternalError { % <str> FatalError -
+    (%stderr) (w) file
+      dup (Internal muZCat Error: ) writestring
+      writestring
+    quit
+  } bind def
+  #define ASSERT_TRUE_POP(str) not{ str InternalError }if
+  #define ASSERT_FALSE_POP(str) { str InternalError }if
+  #define ASSERT_TRUE(what,str) what not{ str InternalError }if
+#endif
+
+
+/** Binary (Huffman) tree of nodes. */
+GLOBAL_ARRAY(array,N,NODESIZE)
+/** Index of the first free node in <code>N</code>. */
+GLOBAL_VAR(D)
+
+/* constant arrays (lookup tables) */
+/constW   16 17 18 0 8 7 9 6 10 5 11 4 12 3 13 2 14 1 15  19 packedarray def
+/constU   3 4 5 6 7 8 9 10 11 13 15 17 19 23 27 31 35 43 51 59 67 83 99 115 131 163 195 227 258  29 packedarray def
+/constP   0 0 0 0 0 0 0 0 1 1 1 1 2 2 2 2 3 3 3 3 4 4 4 4 5 5 5 5 0  29 packedarray def
+/constQ   1 2 3 4 5 7 9 13 17 25 33 49 65 97 129 193 257 385 513 769 1025 1537 2049 3073 4097 6145 8193 12289 16385 24577  30 packedarray def
+/constL   0 0 0 0 1 1 2 2 3 3 4 4 5 5 6 6 7 7 8 8 9 9 10 10 11 11 12 12 13 13  30 packedarray def
+/constM   0 1 3 7 15 31 63 127 255 511 1023 2047 4095 8191  14 packedarray def
+/constZ17 0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0  17 packedarray def
+
+/**
+ * Contains the code word lengths used for Huffman code generation in
+ * fvMktree(). 320==288+32. 320 is large enough to hold both the code lengths
+ * of the literal--length (288) and the distance (32) Huffman trees -- and
+ * large enough to hold the auxilary Huffman tree (used for building the
+ * real tree) of length 19.
+ */
+GLOBAL_ARRAY(array,Z,320)
+
+GLOBAL_ARRAY(array,B,17)
+GLOBAL_ARRAY(array,G,17)
+
+GLOBAL_VAR(NODEN,no)
+GLOBAL_VAR(WORD,roo)
+GLOBAL_VAR(WORD,rf)
+GLOBAL_VAR(WORD,moo)
+GLOBAL_VAR(WORD,mq)
+GLOBAL_VAR(WORD,mo)
+GLOBAL_VAR(WORD,mf)
+GLOBAL_VAR(WORD,o)
+GLOBAL_VAR(WORD,q)
+GLOBAL_VAR(WORD,ty)
+GLOBAL_VAR(WORD,oo)
+GLOBAL_VAR(WORD,ooo)
+GLOBAL_VAR(WORD,oooo)
+GLOBAL_VAR(WORD,f)
+GLOBAL_VAR(WORD,p)
+GLOBAL_VAR(WORD,v)
+GLOBAL_VAR(WORD,h)
+GLOBAL_VAR(WORD,x)
+
+GLOBAL_ARRAY(string,S,32768)
+
+#define AREF_S(idx) AREF(S,idx)
+#define ASET_S(idx,val) ASET(S,idx,val)
+
+/* Reading Operations:
+
+-- fxRead8(): read a 8-bit byte at byte boundary
+-- fxRead16z(): read a 16-bit word at byte boundary, MSB first (ZIP)
+-- fxRead16(): read a 16-bit word at byte boundary, LSB first (normal)
+-- fxSkip(): skip to next byte boundary
+-- fxRead1(): read 1 bit (for Huffman)
+-- fvRead(): read any amount of bits (0..13), LSB first
+*/
+
+#define my_getchar() Stdin read not{511}if
+
+/** char, 0..255 */
+SLOCAL_VAR(WORD,preread)
+/** 0..7: bits of bufread[pos] already read */
+SLOCAL_VAR(WORD,past)
+
+% static void fxInit(void) {
+/fxInit {
+  my_getchar()
+  /past 0 def
+}bind def
+
+#define ASSERT_PREREAD_NOT_EOF() preread 255 gt ASSERT_FALSE_POP((unexpected eof))
+
+/** reads 0..13 bits */
+% static WORD fvRead(WORD arg) {
+/fvRead {
+  dup 0 ne {
+    ASSERT_PREREAD_NOT_EOF()
+    past
+    % Stack: arg opast
+    preread exch neg bitshift exch % SHR
+    dup 3 index add
+    % Stack: arg ret==:preread>>opast opast past==:opast+arg
+    dup 8 le{
+      dup 8 eq{
+        /preread my_getchar() def
+        /past 0 def
+      }if
+      pop pop
+      % Stack: arg ret
+    }{
+      ASSERT_TRUE(dup 9 ge,(past>=9))
+      /preread my_getchar() def
+      ASSERT_PREREAD_NOT_EOF()
+      dup 16 lt{
+        8 sub /past exch def
+        8 exch sub
+        % Stack: arg ret==:preread>>opast 8-opast
+        preread exch bitshift % SHL
+        add
+        % Stack: arg ret'
+      }{
+        /preread my_getchar() def
+        16 sub /past exch def
+        8 exch sub 2 copy
+        % Stack: arg ret==:preread>>opast 8-opast ret 8-opast
+        preread exch bitshift add % SHL
+        % Stack: arg retold 8-opast ret'
+        past 0 ne{
+          ASSERT_TRUE(past 4 le,(past<=4))
+          ASSERT_PREREAD_NOT_EOF()
+          exch 8 add preread exch bitshift add
+          % Stack: arg retold ret''
+        }{
+          exch pop
+        }ifelse
+        exch pop
+        % Stack: arg ret''
+      }ifelse
+    }ifelse
+    % Stack: arg ret
+    exch constM exch get and  % ret&=((1<<arg)-1);
+  }if
+  % fvRead(0)==0 implicitly assumed
+}bind def
+
+% static WORD fxRead1(void) {
+/fxRead1{
+  ASSERT_PREREAD_NOT_EOF()
+  past dup 7 eq{
+    pop
+    preread -7 bitshift
+    % Stack: ret
+    /preread my_getchar() def
+    /past 0 def
+  }{
+    dup 1 add /past exch def
+    preread exch neg bitshift 1 and
+    % Stack: ret
+  }ifelse
+}bind def
+
+% static void fxSkip(void) {
+/fxSkip{
+  past 0 ne{
+    ASSERT_PREREAD_NOT_EOF()
+    /preread my_getchar() def
+    /past 0 def
+  }if
+}bind def
+
+% static WORD fxRead16(void) {
+/fxRead16{
+  ASSERT_TRUE(past 0 eq,(past==0))
+  ASSERT_PREREAD_NOT_EOF()
+  preread
+  % Stack: ret
+  my_getchar() dup /preread exch def
+  ASSERT_PREREAD_NOT_EOF()
+  8 bitshift
+  add
+  /preread my_getchar() def
+}bind def
+
+% static WORD fxRead8(void) {
+/fxRead8{
+  ASSERT_TRUE(past 0 eq,(past==0))
+  ASSERT_PREREAD_NOT_EOF()
+  preread
+  % Stack: ret
+  /preread my_getchar() def
+}bind def
+
+% static WORD fxRead8EOF(void) {
+/fxRead8EOF{
+  ASSERT_TRUE(past 0 eq,(past==0))
+  preread
+  % Stack: ret
+  /preread my_getchar() def
+}bind def
+
+#define fvReadq fvRead
+/** Reads an uint16 from the ZIP file */
+#define fxRead16z fxRead16
+
+/** 
+ * Allocates a new node and initializes it with empty content. This function
+ * lets us get rid of the global variable F (which was buggily uninitialized
+ * in the original scm.c).
+ * @return pointer to the newly allocated node
+ * @whichcode -1
+ */
+% DEFUN_0(NODEN,fvNalloc)
+/fvNalloc{
+  % GLOBAL_REF(N)
+  % GLOBAL_REF(D)
+  % LOCAL_VAR(NODEN,no) /* the first/next free node */
+  % FUNCODE
+  D
+  % Stack: no
+  ASSERT_TRUE(dup NODESIZE lt,(D<NODESIZE))
+  dup N exch get  /D exch def  % SET(D,AREF(N,no)); % not free anymore
+  dup N exch NULL put  % ASET(N,no,NULL); % clear; the other two fields are already cleared
+  % Stack: no
+}bind def
+
+/**
+ * Frees the Huffman tree originating from <code>root</code> recursively.
+ * Used <code>I</code> as input only.
+ * Moved <code>I</code> into a argeter.
+ * @param arg root node index in N
+ */
+% DEFUN_1_VOID(fvFree,NODEN)
+/fvFree{
+  % GLOBAL_REF(N)
+  % GLOBAL_REF(D)
+  N arg dup NULL ne{
+    2 copy       get fvFree
+    2 copy 1 add get fvFree  % fvFree(AREF(N,arg+1));
+    2 copy 1 add NULL put    % ASET(N,arg+1,NULL); /* clear */
+    2 copy 2 add 0 put       % ASET(N,arg+2,0); /* clear */
+    2 copy       D put       % ASET(N,arg,D); /* link to the beginning of the free list */
+    /D exch def  pop         % SET(D,arg); /* set it free */
+  }if
+}bind def
+
+/**
+ * Goes down (descends) enough levels in the binary tree of (struct node)s.
+ * Reads numbers from input encoded as a Huffman tree represented by the
+ * (struct node)s.
+ * Called only from 2 places.
+ * Used <code>I</code> as both input and output, but the output is never used
+ * in the program. So I've put <code>I</code> to a argument.
+ * @param arg root is only for input
+ * @whichcode 3
+ */
+% DEFUN_1(WORD,fvDescend,NODEN)
+/fvDescend{
+  % GLOBAL_REF(N)
+  % FUNCODE
+  N exch
+  { % Stack: N arg
+    2 copy get NULL eq{exit}if  % WHILE(NE(NULL,AREF(N,arg)))
+    2 copy fxRead1 add get exch pop  % SET(arg,AREF(N,arg+fxRead1()));
+  }loop % ENDWHILE
+  % Stack: N arg
+  2 add get  % RETURN(fvDescend,AREF(N,arg+2)) /* arg->value; */
+}bind def
+
+/**
+ * Allocates new (struct node)s. This is the Huffman tree
+ * builder. It reads the global array <code>Z</code>: the code lengths have
+ * been already stored there.
+ * Used <code>I</code> as output only, so I moved it to the return value.
+ * @param arg the number of entries (codes) of the Huffman tree to be built
+ * @return the root of the Huffman tree just built
+ * @whichcode 5
+ */
+% DEFUN_1(NODEN,fvMktree,WORD)
+  % GLOBAL_REF(B)
+  % GLOBAL_REF(G)
+  % GLOBAL_REF(N)
+  % GLOBAL_REF(Z)
+  % LOCAL_VAR(WORD,moo)
+  % LOCAL_VAR(WORD,mq)
+  % LOCAL_VAR(WORD,mo)
+  % LOCAL_VAR(WORD,mf)
+  % FUNCODE
+  constZ17 B copy pop % OK to copy packedarray -> array
+  % Stack: arg
+  B Z 0 1  4 index 1 sub
+  % Stack: arg B Z 0 1 arg-1
+  { % Stack: arg B Z moo
+    3 copy get
+    % Stack: arg B Z moo B Z[moo]
+    2 copy get 1 add put
+    % Stack: arg B Z moo
+    pop
+  }for  % WHILE(LT(moo,arg)) INCR(AREF(B,AREF(Z,moo))); INCR(moo); ENDWHILE
+  % Stack: arg B Z
+  pop  0 0 put  % ASET(B,0,0);
+  G 0 0 put  % ASET(G,0,0);
+  % Stack: arg
+  G B 0 1 15   % SET(moo,0); WHILE(LT(moo,16))
+  { % Stack: arg G B moo
+    3 copy exch get
+    % Stack: arg G B moo B G[moo]
+    exch 2 index get add dup add
+    % Stack: arg G B moo 2*(B[moo]+G[moo])
+    3 index exch  2 index 1 add
+    % Stack: arg G B moo G moo+1 2*(B[moo]+G[moo])
+    % ASET(G, moo+1,TWICE(AREF(G,moo)+AREF(B,moo)));
+    put pop
+  }
+  % Stack: arg G B
+  pop pop
+  /* Dat: anode is the ->left pointer of the Sentinel node */
+  N 3 0 put  % ASET(N,3,NULL); /* anode=NULL; */
+  
+  1 sub 0 exch 1 exch{  % SET(moo,0); WHILE(LT(moo,arg))
+    % Stack: moo
+    dup Z exch get dup 0 ne{  % IF(NZ(AREF(Z,moo)))
+      % Stack: moo Z[moo]
+      % /* WORD o, f; */ /* struct node **f; */
+      dup G exch get /mq exch def  % SET(mq,AREF(G,AREF(Z,moo)));
+      dup G exch 2 copy get 1 add put  % INCR(AREF(G,AREF(Z,moo)));
+      % Stack: moo Z[moo]
+      3 exch % SET(mf,3); /* mf=&anode; */
+      % SET(mo,AREF(Z,moo));
+      1 sub -1 0
+      % Stack: moo mq Z[moo]-1 -1 0
+      { % WHILE(NZ(mo));  DECR(mo);
+        % Stack: moo mo
+        N mf get NULL eq {
+          N mf fvNalloc put
+        }if  % IF(EQ(AREF(N,mf),NULL));  ASET(N,mf,fvNalloc NOARGS); ENDIF
+        1 exch bitshift mq and 0 eq{0}{1}ifelse
+        N mf get add
+        /mf exch def  % SET(mf,AREF(N,mf)+TAND_P(mq,SHL(1,mo)));
+        % Stack: moo
+      }for
+      N exch
+      % Stack: N moo
+      N mf 2 copy fvNalloc put  % ASET(N,mf,fvNalloc NOARGS);
+      get 2 add
+      % Stack: N moo AREF(N,mf)+2
+      exch put  % ASET(N,AREF(N,mf)+2,moo); /* (*f)->value=moo; */
+      % Stack: -
+    }{pop pop}ifelse  % ENDIF
+  }for
+  % Stack: -
+  N 3 get
+}bind def
+
+GLOBAL_VAR(WORD,T) /* index (in S) of the first free position, [0..32767] */
+
+#define FMT_ZIP_STORED   0 /* file is stored, not Deflated in ZIP file */
+#define FMT_ZLIB         120
+#define FMT_GZIP         31
+#define FMT_NONE         3
+#define FMT_STOP         4 /* stop processing and flush STDIN */
+#define FMT_ZIP_DEFLATED 8
+
+#define MODE_BOS   0 /* at beginning of (sub)file */
+#define MODE_MOB   1 /* at middle of a DEFLATE block */
+#define MODE_REP   2 /* printing a repeating string in a DEFLATE block */
+#define MODE_BOB   3 /* at the beginning of a block, just before BFINAL and BTYPE */
+#define MODE_COPY1 4 /* copying from input to output (a stored block) */
+#define MODE_ZSTO  5 /* copying from input to output (FMT_ZIP_STORED) */
+
+#define SLOCAL_VAR(t,n) GLOBAL_VAR(t,n)
+SLOCAL_VAR(WORD,mode) /* MODE_* */
+SLOCAL_VAR(WORD,o)
+SLOCAL_VAR(WORD,q)
+SLOCAL_VAR(WORD,ty) /* type of input file: FMT_* */
+/* vvv sub-locals */
+SLOCAL_VAR(WORD,oo)
+SLOCAL_VAR(WORD,ooo)
+SLOCAL_VAR(WORD,oooo)
+SLOCAL_VAR(WORD,f)
+SLOCAL_VAR(WORD,p)
+SLOCAL_VAR(WORD,x)
+/**
+ * Root of the literal--length Huffman tree in <code>N</code>
+ * (see RFC 1951). Its length is at most 288 with values 0..287. Values
+ * 286 and 287 are invalid. A value in 0..255 means a literal byte, a
+ * value of 256 indicates end-of-block, and a
+ * value in 257..285 is a prefix (with 29 possible values) of a length
+ * in 3..258. See subsubsection 3.2.5 of RFC 1951.
+ */
+SLOCAL_VAR(NODEN,v)
+/**
+ * Root of the distance Huffman tree in <code>N</code> (see RFC 1951).
+ * Its length is at most 32 with values 0..31. Values 30 and 31 are invalid.
+ * A value of 0..29 is a prefix (with 30 possible values) of a distance in
+ * 1..32768. See subsubsection 3.2.5 of RFC 1951.
+ */
+SLOCAL_VAR(NODEN,h)
+
+% ^^^ translated to PostScript by pts@fazekas.hu at Tue Dec 25 23:11:31 CET 2001
+
+/** @return length to be written from S */
+% static WORD fvWork(void) {
+/fvWork{
+  % GLOBAL_REF(J)
+  % GLOBAL_REF(Y)
+  % GLOBAL_REF(T)
+  % GLOBAL_REF(N)
+  % GLOBAL_REF(D)
+
+  IF(EQ(mode,MODE_REP))
+    assert(T==0);
+    assert(f<=258);
+    /* f==0 is OK now */
+    WHILE(NZ(f))
+      ASET_S(T,AREF_S(oo));
+      SLIDE(oo);
+      INCR(T);
+      DECR(f);
+    ENDWHILE
+    SET(mode,MODE_MOB);
+  ELSE_IF(EQ(mode,MODE_COPY1))
+    /* Now: f: copy count unsinged word16 */
+    assert(T==0);
+    /* f==0 is OK now */
+    IF((unsigned short)f>=32768)
+      WHILE(NE((unsigned short)T,32768))
+        ASET_S(T,fxRead8());
+        INCR(T);
+        DECR(f);
+      ENDWHILE
+      SET(T,0);
+      assert(mode==MODE_COPY1);
+      return (WORD)32768;
+    ELSE
+      WHILE(NZ(f))
+        ASET_S(T,fxRead8());
+        INCR(T);
+        DECR(f);
+      ENDWHILE
+      SET(mode,MODE_BOB);
+    ENDIF
+  ELSE_IF(EQ(mode,MODE_ZSTO))
+    /* Now: f: copy count low unsinged word16, ooo: high unsigned word16 */
+    /* Now: oo: 0..1 flag for decrementing ooo */
+    assert(T==0);
+    /* f==0 is OK now */
+    IF((unsigned short)f>=32768)
+      SET(oo,f-32768);
+      WHILE(NE(f,oo))
+        ASET_S(T,fxRead8());
+        INCR(T);
+        DECR(f);
+      ENDWHILE
+      SET(T,0);
+      assert(mode==MODE_ZSTO);
+      return (WORD)32768;
+    ELSE_IF(NZ(ooo))
+      WHILE(NE((unsigned short)T,32768))
+        ASET_S(T,fxRead8());
+        INCR(T);
+      ENDWHILE
+      IF(NZ(ooo))
+        DECR(oo);
+        SET(ooo,0);
+      ELSE
+        SET(ooo,1);
+      ENDIF
+      SET(T,0);
+      assert(mode==MODE_ZSTO);
+      return (WORD)32768;
+    ELSE
+      WHILE(NZ(f))
+        ASET_S(T,fxRead8());
+        INCR(T);
+        DECR(f);
+      ENDWHILE
+      SET(mode,MODE_BOS);
+    ENDIF
+  ENDIF
+  IF(EQ(mode,MODE_MOB))
+   mode_mob:
+    /**
+     * Uncompresses the data block with the Huffman codes set up.
+     *
+     * Reads at most 33 bits per entry. Unfortunately the block can be of
+     * arbitrary length (terminated by an entry of 256).
+     */
+    SET(oo,fvDescend(v));
+    /* ^^^ reads 0..15 bits, see subsubsection 3.2.7 of RFC 1951 */
+    WHILE(NE(oo, 256))
+      IF(LT(oo,257))
+        /* ^^^ BUG corrected */
+        ASET_S(T,oo);
+        SLIDE(T); /* T++; T&=32767; */
+        if (T==0) return (WORD)32768; /* remain in MODE_MOB */
+      ELSE
+        SUB(oo,257);
+        SET(f,AREF(constU,oo) + fvRead(AREF(constP,oo))); /* fvRead! 0..5 bits */
+        assert(3<=f && f<=258);
+        SET(oo,fvDescend(h));
+        SET(oo,AREF(constQ,oo) + fvRead(AREF(constL,oo))); /* fvRead! 0..13 bits */
+        /* oo = oo <= T ? T - oo : 32768 - oo + T; */
+        IF(LT(T,oo))
+          SET(oo,32768-oo+T);
+        ELSE
+          SET(oo,T-oo);
+        ENDIF
+        IF((unsigned short)f<32768-(unsigned short)T)
+          WHILE(NZ(f))
+            ASET_S(T,AREF_S(oo));
+            SLIDE(oo);
+            INCR(T);
+            DECR(f);
+          ENDWHILE
+        ELSE
+          SUB(f,32768-T);
+          WHILE((unsigned short)T!=32768)
+            ASET_S(T,AREF_S(oo));
+            SLIDE(oo);
+            INCR(T);
+          ENDWHILE
+          SET(T,0);
+          mode=MODE_REP;
+          return (WORD)32768;
+        ENDIF
+      ENDIF
+      SET(oo,fvDescend(v));
+      /* ^^^ reads 0..15 bits, see subsubsection 3.2.7 of RFC 1951 */
+    ENDWHILE
+    fvFree(v);
+    fvFree(h);
+    IF(NZ(o))
+      goto on_bos;
+    ELSE
+      SET(mode,MODE_BOB);
+    ENDIF
+  ENDIF
+  WHILE(EQ(mode,MODE_BOB))
+   mode_bob:
+    assert(mode==MODE_BOB);
+    SET(o,fvRead(1)); /* BFINAL: 1 iff this is the last data block */
+    SET(q,fvRead(2)); /* BTYPE: block type; 0=stored, 1=fixed Huff, 2=dyn Huff */
+   #if NDEBUG
+   #else
+    fprintf(stderr, "MODE_BOB o=%d q=%d %ld\n", o, q, ftell(stdin));
+   #endif
+    assert(q==0 || q==1 || q==2);
+    IF(NZ(q))
+     /**
+      * Now: q==BTYPE, q==1 or q==2. (BTYPE==3 means error). Handles
+      * compressed data blocks, see subsubsection 3.2.5 of RFC 1951.
+      */
+#if 0 /* obsolete */
+      IF(TAND_1(q)) /* inline: fv(..., 8); */
+#else
+      IF(EQ(q,1))
+#endif      
+      /**
+       * Initializes the fixed Huffman codes for BTYPE==1.
+       */
+        /* WORD oo; */
+        SET(oo,288);
+        WHILE(NZ(oo))
+          DECR(oo);
+          /* AREF(Z,oo) = oo < 144 ? 8
+                : oo < 256 ? 9
+                : oo < 280 ? 7
+                : 8; */
+#if 0
+            if (144<=oo && oo<256) AREF(Z,oo)=9;
+            else if (256<=oo && oo<280) AREF(Z,oo)=7;
+            else AREF(Z,oo)=8;
+#else /* this doesn't require &&, <= etc */
+            IF(LT(oo,144))
+              ASET(Z,oo,8);
+            ELSE_IF(LT(oo,256))
+              ASET(Z,oo,9);
+            ELSE_IF(LT(oo,280))
+              ASET(Z,oo,7);
+            ELSE
+              ASET(Z,oo,8);
+            ENDIF
+#endif
+        ENDWHILE
+        SET(v,fvMktree(288));
+#if SMALLEST_CODE
+        SET(f,0); WHILE(LT(f,32)) ASET(Z,f,5); INCR(f); ENDWHILE
+#else
+        ASET(Z, 0,5); ASET(Z, 1,5); ASET(Z, 2,5); ASET(Z, 3,5); ASET(Z, 4,5); ASET(Z, 5,5); ASET(Z, 6,5); ASET(Z, 7,5);
+        ASET(Z, 8,5); ASET(Z, 9,5); ASET(Z,10,5); ASET(Z,11,5); ASET(Z,12,5); ASET(Z,13,5); ASET(Z,14,5); ASET(Z,15,5);
+        ASET(Z,16,5); ASET(Z,17,5); ASET(Z,18,5); ASET(Z,19,5); ASET(Z,20,5); ASET(Z,21,5); ASET(Z,22,5); ASET(Z,23,5);
+        ASET(Z,24,5); ASET(Z,25,5); ASET(Z,26,5); ASET(Z,27,5); ASET(Z,28,5); ASET(Z,29,5); ASET(Z,30,5); ASET(Z,31,5);
+#endif
+        SET(h,fvMktree(32));
+#if 0 /* obsolete */
+      ENDIF IF(TAND_P(q,2)) /* inline: fv(..., 9); */
+#else
+      ELSE
+#endif
+        /**
+         * Reads dynamic Huffman codes for BTYPE==2.
+         *
+         * Maximum read: 5+5+4+3*19+7*289 == 2094 bits
+         */
+        assert(q==2);
+        /* WORD oo, ooo, oooo, f, p, x, v; */
+        SET(p, fvRead(5) + 257); /* HLIT: 257..286 (287--289 are unused) */
+        SET(x, fvRead(5) + 1); /* HDIST: 1..32 */
+        SET(v, fvRead(4) + 4); /* HCLEN: 4..19 */ /* small v */
+        SET(oo, 0);
+        WHILE(LT(oo,v))  ASET(Z,AREF(constW,oo), fvRead(3)); INCR(oo); ENDWHILE /* small v */
+        WHILE(LT(oo,19)) ASET(Z,AREF(constW,oo), 0); INCR(oo); ENDWHILE
+        SET(v,fvMktree(19));
+        SET(ooo,0);
+        SET(oo,0);
+        WHILE(LT(oo,p + x))
+          SET(oooo,fvDescend(v));
+          /* f = o == 16 ? ((o = ooo), 3 + fvRead(2))
+               : o == 17 ? ((o = 0), 3 + fvRead(3))
+               : o == 18 ? ((o = 0), 11 + fvRead(7))
+               : ((ooo = o), 1); */
+          IF(EQ(oooo,16))
+            SET(oooo,ooo); SET(f,3+fvRead(2));
+          ELSE_IF(EQ(oooo,17))
+            SET(oooo,0); SET(f,3+fvRead(3));
+          ELSE_IF(EQ(oooo,18))
+            SET(oooo,0); SET(f,11+fvRead(7));
+          ELSE
+            SET(ooo,oooo); SET(f,1);
+          ENDIF
+          SET(q,f);
+          WHILE(NZ(q)) ASET(Z,oo,oooo); INCR(oo); DECR(q); ENDWHILE
+        ENDWHILE
+        fvFree(v);
+        SET(v,fvMktree(p));
+        SET(oo,x);
+        /* vvv No need for array copy, just change/pass the pointer to Z... */
+        WHILE(NZ(oo)) DECR(oo); ASET(Z,oo,AREF(Z,oo + p)); ENDWHILE
+        SET(h,fvMktree(x));
+      ENDIF
+      SET(mode,MODE_MOB);
+      goto mode_mob;
+    ELSE /* inline: fv(..., 7); */
+      /**
+       * Copies a block of input to output (mostly) verbatim. This is for
+       * BTYPE==0, non-compressed block, subsubsection 3.2.4 of RFC 1951.
+       * (We need non-compressed because
+       * some blocks cannot be compressed effectively, so gzip inserts them
+       * as is.)
+       * @whichcode 7
+       */
+      fxSkip();
+      /* ^^^ skip till we reach byte boundary. fvRead! 0..7 bits */
+      SET(f,fxRead16()); /* length of block: 0..65535 */
+     #if NDEBUG
+     #else
+      fprintf(stderr, "COPY1_BLK=%d T=%d\n", f, T);
+     #endif
+      IGNORE fxRead16(); /* one's complement of length; ignored */
+      IF((unsigned short)f<32768-(unsigned short)T)
+        WHILE(NZ(f))
+          ASET_S(T,fxRead8());
+          INCR(T);
+          DECR(f);
+        ENDWHILE
+        assert(mode==MODE_BOB);
+      ELSE
+        /* Even if f>=32768 */
+        SUB(f,32768-T);
+        WHILE((unsigned short)T!=32768)
+          ASET_S(T,fxRead8());
+          INCR(T);
+        ENDWHILE
+        SET(T,0);
+        mode=MODE_COPY1;
+        return (WORD)32768;
+      ENDIF
+    ENDIF
+    IF(NZ(o))
+     on_bos:
+      SET(mode,MODE_BOS);
+      fxSkip();
+      /* ^^^ skip till we reach byte boundary. fvRead! 0..7 bits */
+     #if NDEBUG
+     #else
+      fprintf(stderr,"done! %d\n", ty);
+     #endif
+      IF(EQ(ty,FMT_GZIP))
+        /* CRC32 and ISIZE remaining */
+        IGNORE fxRead16(); IGNORE fxRead16(); IGNORE fxRead16(); IGNORE fxRead16();
+      ELSE_IF(EQ(ty,FMT_ZLIB))
+        /* ADLER32 remaining */
+        IGNORE fxRead16(); IGNORE fxRead16();
+      ENDIF
+    ENDIF
+  ENDWHILE /* MODE_BOB */
+  assert(mode==MODE_BOS);
+    
+  WHILE(NE(ty,FMT_STOP))
+    /* SET(oo,0); SET(ooo,0); */ /* avoid GCC warnings */
+    /* fxInit(); */ /* assert(Y==0); SET(J,0); SET(Y,0); */
+    SET(v,NULL); SET(h,NULL);
+    ASET(N,0,NULL); ASET(N,1,NULL); ASET(N,2,0); /* the NULL node is initially empty */
+    ASET(N,3,NULL); ASET(N,4,NULL); ASET(N,5,0); /* the Sentinel node is initially empty */
+    SET(D,6); /* first free node is 6. `0' is NULL, `3' is Sentinel */
+    SET(o,D);
+    WHILE (LT(o,NODESIZE))
+      ASET(N,o,o+3);  INCR(o); /* next free node is next node */
+      ASET(N,o,NULL); INCR(o); /* empty RIGHT */
+      ASET(N,o,0);    INCR(o); /* empty NVAL */
+    ENDWHILE
+    SET(ty,fxRead8EOF()); /* read first byte of the header */
+    IF(EQ(ty,511)) /* EOF */
+      SET(ty,FMT_STOP);
+    ELSE_IF(EQ(ty,120)) /* ZLIB format */
+      IGNORE fxRead8(); /* skip second header byte: 0x01 or 0x5e or 0x9c or 0xda */
+      /* SET(ty,FMT_ZLIB); */
+    ELSE_IF(EQ(ty,80)) /* ZIP format */
+      IGNORE fxRead8(); /* skip second header byte: 0x48 */
+      SET(o,fxRead8());
+      SET(ty,FMT_NONE);
+      IF(EQ(o,3)) /* Local file header */
+        IGNORE fxRead8(); /* skip: 0x04 */
+        IGNORE fxRead16(); /* skip: version needed to extract file (0x0020) */
+        IGNORE fxRead16(); /* LOCFLG flags */
+        SET(ty,fxRead8()); /* lower half of compression method */
+        IGNORE fxRead8(); /* upper half of compression method */
+        IGNORE fxRead16(); IGNORE fxRead16(); /* file modification time in MS-DOS format */
+        IGNORE fxRead16(); IGNORE fxRead16(); /* some kind of CRC-32 */
+        SET(f,  fxRead16z());  /* lower compressed file size */
+        SET(ooo,fxRead16z()); /* higher compressed file size */
+        IGNORE fxRead16(); IGNORE fxRead16(); /* uncompressed file size */
+        SET(oo,fxRead16z()); /* length of filename */      
+        SET(q,fxRead16z()); /* length of extra field */
+        #if NDEBUG
+          WHILE(NZ(oo)) IGNORE fxRead8(); DECR(oo); ENDWHILE /* file name */
+        #else
+          WHILE(NZ(oo)) fputc(fxRead8(),stderr); DECR(oo); ENDWHILE /* file name */
+          fprintf(stderr,".\n");
+        #endif
+        WHILE(NZ(q)) IGNORE fxRead8(); DECR(q); ENDWHILE /* extra field */
+        assert(ty==FMT_ZIP_STORED || ty==FMT_ZIP_DEFLATED);
+      ELSE_IF(EQ(o,7)) /* Extended local header of previous file in ZIP */
+        SET(o,0); WHILE(LT(o,13)) IGNORE fxRead8(); INCR(o); ENDWHILE /* BUGFIX: was 15 */
+      ELSE_IF(EQ(o,5)) /* End of Central Directory Structure in ZIP */
+        /* fprintf(stderr,"EOCDS\n"); */
+        SET(o,0); WHILE(LT(o,17)) IGNORE fxRead8(); INCR(o); ENDWHILE
+        SET(o,fxRead16z()); /* CML: archive comment length */
+        WHILE (NZ(o)) IGNORE fxRead8(); DECR(o); ENDWHILE
+      ELSE_IF(EQ(o,1)) /* Central Directory Structure */
+        /* fprintf(stderr,"CDS\n"); */
+        SET(oo,0); WHILE(LT(oo,25)) IGNORE fxRead8(); INCR(oo); ENDWHILE
+        SET(f,fxRead16z()); /* LEN: length of file name */
+        SET(o,fxRead16z()); /* XLN: length of extra field */
+        SET(q,fxRead16z()); /* CML: length of file comment */
+        SET(oo,0); WHILE(LT(oo,12)) IGNORE fxRead8(); INCR(oo); ENDWHILE
+        WHILE(NZ(f)) IGNORE fxRead8(); DECR(f); ENDWHILE /* file name */
+        WHILE(NZ(o)) IGNORE fxRead8(); DECR(o); ENDWHILE /* extra field */
+        WHILE(NZ(q)) IGNORE fxRead8(); DECR(q); ENDWHILE /* file comment */
+      ENDIF /* IF ZIP structure sub-type */
+    ELSE_IF(EQ(ty,31)) /* gzip/RFC 1952 format */
+      /* fprintf(stderr,"gzip!\n"); */
+      /* SET(ty,FMT_GZIP); */
+      /* The most simple gzip header (10 bytes): 
+       * ID1   hex 0x1f == dec 31 == FMT_GZIP
+       * ID2   hex 0x8b
+       * CM    hex 0x08
+       * FLG   hex 0x00
+       * MTIME hex 0x00, 0x00, 0x00, 0x00 (1 Jan 1970, UNIX epoch)
+       * XFL   hex 0x00
+       * OS    hex 0xff
+       * After that comes the compressed data stream.
+       * After that comes the CRC32 and ISIZE (byte aligned? ?)
+       */
+      IGNORE fxRead16(); /* ignore ID2 and CM */
+      SET(o,fxRead8()); /* FLG */
+      IGNORE fxRead16(); IGNORE fxRead16(); /* ignore MTIME */
+      IGNORE fxRead16(); /* ignore XFL, OS */
+#ifndef CFG_INPUT_RFC
+      IF(TAND_P(o,2)) /* GCONT: skip part number of continuation */
+        IGNORE fxRead16();
+      ENDIF
+#endif
+      IF(TAND_P(o,4)) /* ignore FEXTRA */
+        SET(q,fxRead16());
+        WHILE(NZ(q)) IGNORE fxRead8(); DECR(q); ENDWHILE
+      ENDIF
+      IF(TAND_P(o,8))
+        WHILE(NZ(fxRead8()))
+          PASS;
+        ENDWHILE
+      ENDIF /* ignore FNAME */
+      IF(TAND_P(o,16))
+        WHILE(NZ(fxRead8()))
+          PASS;
+        ENDWHILE
+      ENDIF /* ignore FCOMMENT */
+#ifdef CFG_INPUT_RFC 
+      IF(TAND_P(o,2)) IGNORE fxRead16(); ENDIF /* ignore FHCRC */
+#else /* CFG_INPUT_FILE */
+      IF(TAND_P(o,32)) /* skip encryption header */
+        SET(f,0); WHILE(LT(f,12)) IGNORE fxRead8(); INCR(f); ENDWHILE
+      ENDIF
+#endif
+    ENDIF /* IF file format */
+    /* fprintf(stderr,"ty=%d\n", ty); */
+    IF(EQ(ty,FMT_ZIP_STORED))
+      /* fprintf(stderr,"ZIP_STORED oo=%d ooo=%d\n", oo, ooo); */
+      SET(oo,0);
+      IF((unsigned short)f<32768-(unsigned short)T)
+        WHILE(NZ(f))
+          ASET_S(T,fxRead8());
+          INCR(T);
+          DECR(f);
+        ENDWHILE
+        IF(NZ(ooo))
+          mode=MODE_ZSTO;
+          return T;
+        ENDIF
+        assert(mode==MODE_BOS);
+      ELSE
+        /* Even if f>=32768 */
+        SUB(f,32768-T);
+        WHILE((unsigned short)T!=32768)
+          ASET_S(T,fxRead8());
+          INCR(T);
+        ENDWHILE
+        SET(T,0);
+        mode=MODE_ZSTO;
+        return (WORD)32768;
+      ENDIF
+    ELSE_IF(EQ(ty,FMT_STOP))
+      PASS
+    ELSE_IF(NE(ty,FMT_NONE))
+      SET(mode,MODE_BOB);
+      goto mode_bob;
+    ENDIF
+  ENDWHILE /* outermost WHILE(NE(ty,FMT_STOP)) */
+  IF(NZ(T))
+    /* Flush unwritten buffer. */
+    SET(oo,T);
+    SET(T,0);
+    return oo;
+  ENDIF
+  return 0;
+}bind def  % ENDFUN
+
+int main(int argc, char **argv);
+int main(int argc, char **argv) {
+  WORD howmuch;
+  (void)argc; (void)argv;
+  /* freopen("bash.file.zip","rb",stdin); */
+  fxInit();
+  SET(ty,FMT_NONE);
+  SET(mode,MODE_BOS);
+  SET(T,0); /* make the round buffer empty */
+  WHILE(0!=(howmuch=fvWork()))
+   #if NDEBUG
+   #else
+    fprintf(stderr,"written=%d ty=%d mode=%d\n", howmuch, ty, mode);
+   #endif
+   #if CFG_OLD_SLOW_WRITE
+    { WORD i;
+      SET(i,0);
+      WHILE(NZ(howmuch))
+        my_putchar(AREF_S(i));
+        DECR(howmuch);
+        INCR(i);
+      ENDWHILE
+    }
+   #else
+    write(1,S,(unsigned short)howmuch);
+    /* fwrite(S,1,(unsigned short)howmuch,stdout); -- _not_ slower than write() */
+   #endif
+  ENDWHILE
+  return 0;
+}
+
+/* __END__ */

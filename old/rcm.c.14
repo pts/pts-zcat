@@ -1,0 +1,499 @@
+/* rewritten by pts@fazekas.hu at Fri Jun 29 23:42:40 CEST 2001
+ * Sat Jun 30 09:49:56 CEST 2001
+ * Sat Jun 30 16:01:11 CEST 2001
+ *
+ * SUXX: we don't check for CRC
+ * SUXX: we don't validate file
+ * SUXX: we don't check for EOF
+ * SUXX: segfault on invalid file
+ *
+ * OK : eliminate malloc(), only static storage in var `N'
+ * OK : eliminate pointers (*)
+ * OK : works with WORD defined as either `signed short' or `unsigned short'
+ *      The problems with %, / and >> have been solved. This means that
+ *      it should be easy to port to Java (either >> or >>>) and PostScript.
+ * OK : works with BYTE defined as either `signed char'  or `unsigned char'
+ * OK : eliminate DWORDs
+ * OK : add initialization of global variables
+ * OK : convert short, fixed loops to series of instructions
+ * OK : simplify if's
+ * OK : `for' -> `while'
+ *      This means that it should be easy to port to Ruby.
+ * OK : no `for', no `goto', no `break', no `continue'
+ * OK : unobfuscate [] handling
+ * OK : use ++, --, =, += etc. as a standalone instruction, not an operator.
+ *      This means that it should be easy to port to Python.
+ * OK : separate, named fv*() functions instead of B()
+ * OK : remove commas in favour of semicolons
+ * OK : eliminate operator `?:'
+ * OK : eliminate var `I'
+ * OK : boolean handling is like in Java: comparison and logical operators are
+ *      assumed to return a boolean value (which cannot be converted to/from
+ *      int), `if' and `while' test only boolean, not int.
+ * Dat: no signed integers, just unsigned
+ * Dat: no var `l' anymore
+ * Dat: no var `O' anymore
+ * Dat: global variables: one letter, upper case
+ * Dat: no octal and hexadecimal constants in the source
+ * Dat: no multiplication or division, just bit shifts
+ * Dat: compiles with: gcc -O3 -ansi -pedantic -W -Wall -Wstrict-prototypes -Wtraditional -Wnested-externs -Wpointer-arith -Wbad-function-cast -Wcast-qual -Wmissing-prototypes -Winline -Wmissing-declarations rcm.c
+ */
+
+#undef my_getchar
+#undef my_putchar
+#undef BYTE
+#undef WORD
+#undef STATIC_FUNC
+#undef STATIC_VAR
+#undef ENDDOT
+#undef NEED_DECLS
+#undef ARRAY
+
+#if CFG_LANG_JAVA
+  #define BYTE int
+  #define WORD int
+  #define CONST final
+  #define STATIC_FUNC static protected
+  #define STATIC_VAR  static protected
+  #define ENDDOT }
+  #define NO_ARGS
+  #undef NEED_DECLS
+  #define ARRAY(type,name,length) type name[]=new type[length]
+  import java.io.IOException;
+  public class ZCat {
+    public static void main(String[] args) {
+      fvMain();
+      System.out.flush();
+    }
+    public static WORD my_getchar() {
+      try {
+        int i=System.in.read();
+        if (i<0) System.exit(2);
+        return (WORD)(i&255);
+      } catch (IOException e) {
+        System.exit(3);
+      }
+      return 0;
+    }
+    public static void my_putchar(WORD b) {
+      /* try { */
+        System.out.write((byte)b);
+      /* } catch (IOException e) {} */
+    }
+#elif CFG_LANG_OC
+  #define BYTE char
+  #define WORD int
+  #define STATIC_FUNC
+  #define STATIC_VAR
+  #define ENDDOT
+  #define CONST
+  #define my_putchar putchar
+  #define my_getchar getchar
+  #undef NEED_DECLS
+  #define NO_ARGS
+  #define ARRAY(type,name,length) type name[length]
+#elif CFG_LANG_ANSIC_SIGNED
+  #define my_putchar putchar
+  #define my_getchar getchar
+  #include <stdio.h> /* putchar(), getchar() */
+  #define BYTE signed char
+  #define WORD signed short
+  #define STATIC_FUNC static
+  #define STATIC_VAR  static
+  #define CONST const
+  #define ENDDOT
+  #define NEED_DECLS 1
+  #define NO_ARGS void
+  #define ARRAY(type,name,length) type name[length]
+  static void fvMain(void);
+  int main(int argc, char **argv);
+  int main(int argc, char **argv) {
+    (void)argc; (void)argv;
+    fvMain();
+    return 0;
+  }
+#else /* ANSI C */
+  #undef  CFG_LANG_ANSIC
+  #define CFG_LANG_ANSIC 1
+  /* used library functions */
+  #define my_putchar putchar
+  #define my_getchar getchar
+  #include <stdio.h> /* putchar(), getchar() */
+  /* used integer types, except for main() */
+  #define BYTE unsigned char /* 8 bits */
+  #define WORD unsigned short /* >=16 bits; works either unsigned or signed */
+  #define STATIC_FUNC static
+  #define STATIC_VAR  static
+  #define CONST const
+  #define ENDDOT
+  #define NEED_DECLS 1
+  #define NO_ARGS void
+  #define ARRAY(type,name,length) type name[length]
+  static void fvMain(void);
+  int main(int argc, char **argv);
+  int main(int argc, char **argv) {
+    (void)argc; (void)argv;
+    fvMain();
+    return 0;
+  }
+#endif
+
+/* datatype declarations
+ * It would be simple to define a struct for the binary Huffmann tree we
+ * need for decompression as:
+ * 
+ *      struct node {
+ *        struct node *left, *right;
+ *        WORD value;
+ *      };
+ * 
+ * But this approach would mean that we would need `pointer's. Many programming
+ * languages don't have pointers, so the program would be less portable (but
+ * the source would be more readable). So we use the array `N' for representing
+ * nodes (one WORD for left, one WORD for right, one WORD for value). Nodes
+ * are addressed with their node number (NODEN) in the array N. Every NODEN is
+ * divisible by 3. `F' points to the first free node. Free nodes have their
+ * left pointer pointing to the next free node. There is always a `next' free
+ * node (i.e we don't have to deal with out-of-memory errors) beacuse the gzip
+ * algorithm guarantees that the array `N' never exhausts (1998 > 3*(286+2+
+ * 30+2)).
+ */
+#undef NULL
+#define NULL 0
+#undef NODEN
+#define NODEN WORD
+STATIC_VAR ARRAY(WORD,N,1998);
+STATIC_VAR NODEN F;
+#define LEFT(noden)  (N[(noden)+0]) /* unused */
+#define RIGHT(noden) (N[(noden)+1]) /* unused */
+#define NVAL(noden)  (N[(noden)+2]) /* unused */
+
+#if NEED_DECLS
+/* function declarations */
+STATIC_FUNC void fvMain(NO_ARGS);
+STATIC_FUNC NODEN fvNalloc(NO_ARGS);
+STATIC_FUNC void fvFree(NODEN root);
+STATIC_FUNC WORD fvDescend(NODEN root);
+STATIC_FUNC void fvWrite(WORD param);
+STATIC_FUNC NODEN fvNewnode(WORD param);
+#endif
+
+/* constant arrays (lookup tables) */
+STATIC_VAR CONST WORD constW[] = {16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
+STATIC_VAR CONST WORD constU[] = {3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258};
+STATIC_VAR CONST WORD constP[] = {0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0};
+STATIC_VAR CONST WORD constQ[] = {1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577};
+STATIC_VAR CONST WORD constL[] = {0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13};
+
+STATIC_VAR WORD C, T;
+
+/**
+ * A buffer of 16 bits for storing bits read but not processed yet. Needed
+ * because we can read only bytes, not bits with getchar(). Was 32 bits,
+ * but could be reduced.
+ * Used by only fvRead().
+ */
+STATIC_VAR WORD J;
+/**
+ * The number of bits in the buffer <code>J</code>. Used only in fvRead();
+ */
+STATIC_VAR WORD Y;
+
+STATIC_VAR ARRAY(WORD,Z,320);
+STATIC_VAR ARRAY(WORD,B,17);
+STATIC_VAR ARRAY(WORD,G,17);
+STATIC_VAR ARRAY(BYTE,S,32768);
+STATIC_VAR NODEN V, H;
+
+/**
+ * Reads <code>param</code> bits from input.
+ * @param param number of bits to read
+ * @return WORD, consisting of the bits
+ * @whichcode 1
+ */
+STATIC_FUNC WORD fvRead(WORD param) {
+  WORD oo, f;
+  if (0!=param) {
+    /* Assert: 0<=Y && Y<=7; */
+    /* Assert: param<=16 */
+    /* if (Y>7 || param>16) abort(); */
+    /* vvv Dat: 0L means a long (>=32) bit long zero */
+    #if 0 /* J can hold at least 24 bits, must be unsigned */
+      while (Y < param) {
+        J |= (0L + getcha ()) << Y;
+        Y+=8;
+      }
+      Y -= param;
+      if (Y>16) {
+        fprintf(stderr, "%d\n", Y);
+        abort();
+      }
+      oo = J & ((1 << param) - 1);
+      J >>= param;
+      return oo;
+    #else /* J can hold at most 16 bits, may be signed or unsigned */
+      while (Y+8 <= param) {
+        J |= (my_getchar()&255) << Y;
+        Y+=8;
+      }
+      if (Y < param) { /* Y < param < Y+8 */
+        f=my_getchar()&255;
+        oo = (J | f<<Y) & ((1<<param)-1);
+        J = f >> (param-Y); /* 0<=f && f<=255, no need to cast to unsigned */
+        Y += 8 - param;
+      } else { /* Y >= param */
+        oo = J & ((1 << param) - 1);
+        Y -= param;
+        J = (J>>param)&((1<<Y)-1); /* J >>= param; */
+        /* ^^^ this has been corrected to be signedness-independent */
+      }
+      /* fprintf(stderr, "read %d\n", oo&0xffff); */
+      return oo;
+    #endif
+  } else return 0;
+}
+
+/** 
+ * Allocates a new node and initializes it with empty content. This function
+ * lets we get rid of the global variable F (which was buggily uninitialized
+ * in the original scm.c).
+ * @return pointer to the newly allocated node
+ * @whichcode -1
+ */
+STATIC_FUNC NODEN fvNalloc(NO_ARGS) {
+  NODEN n=F; /* the first free */
+  F=N[n]; /* not free anymore */
+  N[n]=NULL; /* clear -- the other two fields are already cleared */
+  /* N[n+1]=NULL; N[n+2]=0; */
+  /* fprintf(stderr, "alloc %d\n", n); */
+  return n;
+}
+
+/**
+ * Frees the Huffman tree originating from <code>root</code> recursively.
+ * Used <code>I</code> as input only.
+ * Moved <code>I</code> into a parameter.
+ */
+STATIC_FUNC void fvFree(NODEN root) {
+  if (NULL!=root) {
+    fvFree(N[root]);
+    fvFree(N[root+1]);
+    /* fprintf(stderr, "free %d\n", root); */
+    N[root+1]=NULL; /* clear */
+    N[root+2]=0; /* clear */
+    N[root]=F; /* link to the beginning of the free list */
+    F=root; /* set it free */
+  }
+}
+
+/**
+ * @whichcode 0, 6
+ */
+STATIC_FUNC void fvMain(NO_ARGS) {
+  WORD o, q;
+  J=0; Y=0; C=0; T=0;
+  V=NULL; H=NULL;
+  N[0]=NULL; N[1]=NULL; N[2]=0; /* the NULL node is initially empty */
+  N[3]=NULL; N[4]=NULL; N[5]=0; /* the Sentinel node is initially empty */
+  F=6; /* first free node is 6. `0' is NULL, `3' is Sentinel */
+  o=F;
+  while (o<1998) {
+    N[o]=o+3;  o++; /* next free node is next node */
+    N[o]=NULL; o++; /* empty RIGHT */
+    N[o]=0;    o++; /* empty NVAL */
+  }
+  fvRead(8); fvRead(16); /* fvRead(24); */
+  o = fvRead(8);
+  fvRead(8); fvRead(16); /* fvRead(24); */
+  fvRead(8); fvRead(16); /* fvRead(24); */
+  if (0!=(o & 4)) {
+    q=fvRead(16);
+    while (q!=0) { fvRead(8); q--; }
+  }
+  while (0!=(o & 8) && 0!=fvRead(8)) ;
+  while (0!=(o & 16) && 0!=fvRead(8)) ;
+  if (0!=(o & 2)) fvRead(16);
+  o = 0;
+  while (o==0) {
+    o = fvRead(1);
+    q = fvRead(2);
+    if (0!=q) {
+      if (0!=(q & 1)) { /* inline: fv(..., 8); */
+        WORD oo;
+        oo=288;
+        while (oo!=0) {
+          oo--;
+          /* Z[oo] = oo < 144 ? 8
+                : oo < 256 ? 9
+                : oo < 280 ? 7
+                : 8; */
+          if (144<=oo && oo<256) Z[oo]=9;
+          else if (256<=oo && oo<280) Z[oo]=7;
+          else Z[oo]=8;
+        }
+        V=fvNewnode(288);
+        Z[ 0]=5; Z[ 1]=5; Z[ 2]=5; Z[ 3]=5; Z[ 4]=5; Z[ 5]=5; Z[ 6]=5; Z[ 7]=5;
+        Z[ 8]=5; Z[ 9]=5; Z[10]=5; Z[11]=5; Z[12]=5; Z[13]=5; Z[14]=5; Z[15]=5;
+        Z[16]=5; Z[17]=5; Z[18]=5; Z[19]=5; Z[20]=5; Z[21]=5; Z[22]=5; Z[23]=5;
+        Z[24]=5; Z[25]=5; Z[26]=5; Z[27]=5; Z[28]=5; Z[29]=5; Z[30]=5; Z[31]=5;
+        H=fvNewnode(32);
+      }
+      if (0!=(q & 2)) { /* inline: fv(..., 9); */
+        WORD oooo, oo, ooo, f; /* ,q */
+        WORD p = fvRead(5) + 257;
+        WORD z = fvRead(5) + 1;
+        WORD v = fvRead(4) + 4;
+        oo = 0;
+        while (oo < v)  { Z[constW[oo]] = fvRead(3); oo++; }
+        while (19 > oo) { Z[constW[oo]] = 0; oo++; }
+        V=fvNewnode(19);
+        ooo=0;
+        oo=0;
+        while (oo < p + z) {
+          oooo = fvDescend(V);
+          /* f = o == 16 ? ((o = ooo), 3 + fvRead(2))
+               : o == 17 ? ((o = 0), 3 + fvRead(3))
+               : o == 18 ? ((o = 0), 11 + fvRead(7))
+               : ((ooo = o), 1); */
+          if (oooo==16) { oooo=ooo; f=3+fvRead(2); }
+          else if (oooo==17) { oooo=0; f=3+fvRead(3); }
+          else if (oooo==18) { oooo=0; f=11+fvRead(7); }
+          else { ooo=oooo; f=1; }
+          q=f;
+          while (q!=0) { Z[oo] = oooo; oo++; q--; }
+        }
+        fvFree(V);
+        V=fvNewnode(p);
+        oo=z;
+        while (oo!=0) { oo--; Z[oo] = Z[oo + p]; }
+        H=fvNewnode(z);
+      }
+      { /* inline: fv(..., 6); */
+        WORD oo, f;
+        oo=fvDescend(V);
+        while (oo != 256) {
+          if (oo > 256) {
+            oo -= 257;
+            f = constU[oo] + fvRead(constP[oo]);
+            oo = fvDescend(H);
+            oo = constQ[oo] + fvRead(constL[oo]);
+            /* oo = oo <= T ? T - oo : 32768 - oo + T; */
+            if (oo<=T) oo=T-oo;
+                  else oo=32768-oo+T;
+            while (f!=0) {
+              fvWrite(S[oo]);
+              oo++;
+              oo&=32767; /* oo %= 32768; */
+              f--;
+            }
+          } else fvWrite(oo);
+          oo=fvDescend(V);
+        }
+      }
+      fvFree(V);
+      fvFree(H);
+    } else { /* inline: fv(..., 7); */
+    /**
+     * Copies a block of input to output (mostly) verbatim. (This is because
+     * some blocks cannot be effectively compressed, so gzip has inserted them as
+     * is.)
+     * @whichcode 7
+     */
+      WORD oo;
+      fvRead(Y&7 /* Y % 8*/);
+      oo=fvRead(16); /* length of block */
+      /* fprintf(stderr, "BLK %d\n", oo&0xffff); */
+      fvRead(16); /* one's complement of length; ignored */
+      while (oo!=0) { fvWrite(fvRead(8)); oo--; }
+    }
+  }
+  T&=32767; C&=32767; /* T%=32768; C%=32768; */
+  while (C!=T) {
+    my_putchar(S[C]);
+    C++;
+    C&=32767; /* C%=32768; */
+  }
+  while (my_getchar()>0) ; /* read whole input to avoid `Broken pipe' messages */
+}
+
+/**
+ * Goes down (descends) enough levels in the binary tree of (struct node)s.
+ * Reads numbers from input encoded as a Huffman tree represented by the
+ * (struct node)s.
+ * Called only from 2 places.
+ * Used <code>I</code> as both input and output, but the output is never used in the
+ * program. So I've put <code>I</code> to a parameter.
+ * @param root is only for input
+ * @whichcode 3
+ */
+STATIC_FUNC WORD fvDescend(NODEN root) {
+  while (NULL!=N[root]) {
+    if (0!=fvRead(1)) root=N[root+1]; else root=N[root];
+  }
+  return N[root+2]; /* root->value; */
+}
+
+/**
+ * Allocates new (struct node)s. Very probably this is the Huffman tree
+ * builder.
+ * Used <code>I</code> as output only, so I moved it to the return value.
+ * @return the root of the Huffman tree just built
+ * @whichcode 5
+ */
+STATIC_FUNC NODEN fvNewnode(WORD param) {
+  WORD oo, q;
+  /* NODEN anode; */
+  B[0]=0; B[1]=0; B[2]=0; B[3]=0; B[4]=0; B[5]=0; B[6]=0; B[7]=0; B[8]=0;
+  B[9]=0; B[10]=0; B[11]=0; B[12]=0; B[13]=0; B[14]=0; B[15]=0; B[16]=0;
+  oo=0;
+  while (oo < param) { B[Z[oo]]++ /* !! */; oo++; }
+  B[0]=0;
+  G[0]=0;
+  G[ 1] = (G[ 0]+B[ 0])<<1; G[ 2] = (G[ 1]+B[ 1])<<1;
+  G[ 3] = (G[ 2]+B[ 2])<<1; G[ 4] = (G[ 3]+B[ 3])<<1;
+  G[ 5] = (G[ 4]+B[ 4])<<1; G[ 6] = (G[ 5]+B[ 5])<<1;
+  G[ 7] = (G[ 6]+B[ 6])<<1; G[ 8] = (G[ 7]+B[ 7])<<1;
+  G[ 9] = (G[ 8]+B[ 8])<<1; G[10] = (G[ 9]+B[ 9])<<1;
+  G[11] = (G[10]+B[10])<<1; G[12] = (G[11]+B[11])<<1;
+  G[13] = (G[12]+B[12])<<1; G[14] = (G[13]+B[13])<<1;
+  G[15] = (G[14]+B[14])<<1; G[16] = (G[15]+B[15])<<1;
+  /* anode is the ->left pointer of the Sentinel node */
+  N[3]=NULL; /* anode=NULL; */
+  oo=0;
+  while (oo < param) {
+    if (0!=Z[oo]) {
+      WORD e; /* struct node **e; */
+      WORD o;
+      q = G[Z[oo]];
+      G[Z[oo]]++;
+      e=3; /* e=&anode; */
+      o = Z[oo];
+      while (o!=0) {
+        o--;
+        if (N[e]==NULL) N[e]=fvNalloc();
+        /* if (0!=((q>>o)&1)) e=&(*e)->right; else e=&(*e)->left; */
+        if (0!=(q&(1<<o))) e=N[e]+1; else e=N[e]+0;
+      }
+      N[e]=fvNalloc();
+      N[N[e]+2]=oo; /* (*e)->value=oo; */
+    }
+    oo++;
+  }
+  return N[3];
+}
+
+/**
+ * Writes out a character if available.
+ * @whichcode 2
+ */
+STATIC_FUNC void fvWrite(WORD param) {
+  /* fprintf(stderr, "write %d\n", param&0xffff); */
+  T&=32767;
+  S[T] = param;
+  T++;
+  T&=32767; C&=32767; /* T%=32768; C%=32768; */
+  if (T==C) { my_putchar(S[C]); C++; }
+}
+
+ENDDOT
+
