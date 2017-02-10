@@ -1884,8 +1884,12 @@
   #define TWICE(a) ((a)<<1)
   #define INCR(r) ((r)++)
   #define DECR(r) ((r)--)
-  
-  #include <unistd.h> /* read(2) and write(2) */
+
+  #ifdef __XTINY__
+    #include <xtiny.h>
+  #else 
+    #include <unistd.h> /* read(2) and write(2) */
+  #endif
   #define BUFSIZE 4096
   static char rbuf[BUFSIZE], *rend=rbuf+BUFSIZE, *rp=rbuf+BUFSIZE;
   static char wbuf[BUFSIZE], *wend=wbuf+BUFSIZE, *wp=wbuf;
