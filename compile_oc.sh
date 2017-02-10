@@ -9,7 +9,7 @@ cpp -DCFG_LANG_OC=1 -E muzcat.c | perl -pe 'exit if/enddot2/' | grep -v '^#' | g
 # enddot2: avoid nasty CPP/GCC bug
 cat august.c zcat.oc | ./august >zcat.oo
 # cat zcat.oc | ./parse >zcat.oo
-rm -f test; time cat zcat.oo random.file.gz | ./august >test ; cmp random.file test
-rm -f test; time cat zcat.oo bash.file.gz   | ./august >test ; cmp bash.file test
-rm -f test; time cat zcat.oo misc.file.gz   | ./august >test ; cmp misc.file test
+rm -f test; time cat zcat.oo testdata/bash.file.gz   | ./august >test ; cmp testdata/bash.file test
+rm -f test; time cat zcat.oo testdata/random.file.gz | ./august >test ; cmp testdata/random.file test
+rm -f test; time cat zcat.oo testdata/misc.file.gz   | ./august >test ; cmp testdata/misc.file test
 echo OK

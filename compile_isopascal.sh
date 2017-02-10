@@ -12,7 +12,7 @@ cpp -DCFG_LANG_ISOPASCAL=1 -E muzcat.c | perl -pe 'exit if/enddot2/' | grep -v '
 # Use compile_freepascal.sh to make it work with Free Pascal.
 # /usr/lib/fpc/0.99.10/
 ppc386 -O2 -vewnhi -Xs -oa.out zcat.pas
-rm -f test; time ./a.out <bash.file.gz >test ; cmp bash.file test
-#rm -f test; time ./a.out <random.file.gz >test ; cmp random.file test
-#rm -f test; time ./a.out <misc.file.gz >test ; cmp misc.file test
+rm -f test; time ./a.out <testdata/bash.file.gz >test ; cmp testdata/bash.file test
+rm -f test; time ./a.out <testdata/random.file.gz >test ; cmp testdata/random.file test
+rm -f test; time ./a.out <testdata/misc.file.gz >test ; cmp testdata/misc.file test
 echo OK

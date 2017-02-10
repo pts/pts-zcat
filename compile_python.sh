@@ -13,7 +13,7 @@ cpp -DCFG_LANG_PYTHON=1 -E muzcat.c | grep -v '^#' | grep -v '^ *$' |
 #  substr($D,-2,2)=""}""/ge' >zcat.py
 # python zcat.py
 # exit
-rm -f test; time python zcat.py <bash.file.gz >test ; cmp bash.file test
-rm -f test; time python zcat.py <random.file.gz >test ; cmp random.file test
-rm -f test; time python zcat.py <misc.file.gz >test ; cmp misc.file test
+rm -f test; time python zcat.py <testdata/bash.file.gz >test ; cmp testdata/bash.file test
+rm -f test; time python zcat.py <testdata/random.file.gz >test ; cmp testdata/random.file test
+rm -f test; time python zcat.py <testdata/misc.file.gz >test ; cmp testdata/misc.file test
 echo OK

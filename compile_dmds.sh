@@ -13,7 +13,7 @@ set -xe
 gcc -E -DCFG_LANG_DMD_SIGNED=1 muzcat.c | grep -v '^#' | grep -v '^ *$' >zcat.d
 # vvv untested
 dmd -o a.out zcat.d
-rm -f test; time ./a.out <bash.file.zip >test ; cmp bash.file test
-rm -f test; time ./a.out <random.file.gz >test ; cmp random.file test
-rm -f test; time ./a.out <misc.file.gz >test ; cmp misc.file test
+rm -f test; time ./a.out <testdata/bash.file.zip >test ; cmp testdata/bash.file test
+rm -f test; time ./a.out <testdata/random.file.gz >test ; cmp testdata/random.file test
+rm -f test; time ./a.out <testdata/misc.file.gz >test ; cmp testdata/misc.file test
 echo OK

@@ -9,7 +9,7 @@ cpp -DCFG_LANG_GAWK=1 -E muzcat.c | grep -v '^#' | grep -v '^ *$' |
         ' >zcat.gawk
 gawk -f zcat.gawk </dev/null  # Check for compile errors.
 # In newer versions of Gawk, `LC_CTYPE=C gawk' can be replaced with `gawk -b'.
-#rm -f test; time LC_CTYPE=C gawk -f zcat.gawk <bash.gz >test ; cmp bash.file test
-#rm -f test; time LC_CTYPE=C gawk -f zcat.gawk ./a.out <random.file.gz >test ; cmp random.file test
-#rm -f test; time LC_CTYPE=C gawk -f zcat.gawk ./a.out <misc.file.gz >test ; cmp misc.file test
+rm -f test; time LC_CTYPE=C gawk -f zcat.gawk <testdata/bash.file.gz >test ; cmp testdata/bash.file test
+rm -f test; time LC_CTYPE=C gawk -f zcat.gawk <testdata/random.file.gz >test ; cmp testdata/random.file test
+rm -f test; time LC_CTYPE=C gawk -f zcat.gawk <testdata/misc.file.gz >test ; cmp testdata/misc.file test
 echo OK

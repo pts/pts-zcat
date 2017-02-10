@@ -20,8 +20,7 @@ cpp -DCFG_LANG_OCPS=1 -E muzcat.c | perl -pe "exit if/enddot2/" | grep -v "^#" |
   echo -n ']'
   cat vmtiny.ps
 ) >zcattiny.ps
-rm -f test; time gs -dNODISPLAY -q zcattiny.ps <a.file.gz >test ; cmp a.file test
-rm -f test; time gs -dNODISPLAY -q zcattiny.ps <random.file.gz >test ; cmp random.file test
-rm -f test; time gs -dNODISPLAY -q zcattiny.ps <bash.file.gz   >test ; cmp bash.file test
-rm -f test; time gs -dNODISPLAY -q zcattiny.ps <misc.file.gz   >test ; cmp misc.file test
+rm -f test; time gs -dNODISPLAY -q zcattiny.ps <testdata/random.file.gz >test ; cmp testdata/random.file test
+rm -f test; time gs -dNODISPLAY -q zcattiny.ps <testdata/bash.file.gz   >test ; cmp testdata/bash.file test
+rm -f test; time gs -dNODISPLAY -q zcattiny.ps <testdata/misc.file.gz   >test ; cmp testdata/misc.file test
 echo OK

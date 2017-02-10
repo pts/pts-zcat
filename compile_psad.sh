@@ -17,7 +17,7 @@ cpp -DCFG_LANG_OCPS=1 -E muzcat.c | perl -pe "exit if/enddot2/" | grep -v "^#" |
 rm -f test; time gs -dNODISPLAY -q zcatad.ps <a.file.gz.a85 >test ; cmp a.file test
 exit
 # vvv tests not appropriate (need further decoding)
-rm -f test; time gs -dNODISPLAY -q zcatad.ps <random.file.gz >test ; cmp random.file test
-rm -f test; time gs -dNODISPLAY -q zcatad.ps <bash.file.gz   >test ; cmp bash.file test
-rm -f test; time gs -dNODISPLAY -q zcatad.ps <misc.file.gz   >test ; cmp misc.file test
+rm -f test; time gs -dNODISPLAY -q zcatad.ps <testdata/bash.file.gz   >test ; cmp testdata/bash.file test
+rm -f test; time gs -dNODISPLAY -q zcatad.ps <testdata/random.file.gz >test ; cmp testdata/random.file test
+rm -f test; time gs -dNODISPLAY -q zcatad.ps <testdata/misc.file.gz   >test ; cmp testdata/misc.file test
 echo OK
