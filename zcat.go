@@ -11,7 +11,7 @@
 // real    0m1.050s
 // user    0m1.048s
 // sys     0m0.000s
-kat@pax:~/d$ time gzip -cd <../anyremote-4.11.tar.gz >/dev/null
+// kat@pax:~/d$ time gzip -cd <../anyremote-4.11.tar.gz >/dev/null
 // 
 // real    0m0.084s
 // user    0m0.084s
