@@ -1,11 +1,11 @@
-README for muZCat:
-a portable and minimalistic Flate uncompression filter
+muZCat: portable and minimalistic Flate decompression filter
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 FAQ
 ~~~
 1. What's muZCat?
 """""""""""""""""
-muZCat is Flate uncompression filter that can uncompress GZIP, ZIP and ZLIB
+muZCat is Flate decompression filter that can decompress GZIP, ZIP and ZLIB
 (PS /FlateEncode-d) files and concatenations of those. muZCat is implemented
 in ANSI C, K&R C, Java, OC, Perl, Ruby, Python, ISO Standard Pascal and
 PostScript. No external libraries (such as zlib) are required.
@@ -47,14 +47,14 @@ PostScript. No external libraries (such as zlib) are required.
 -- CRC checks are skipped. Files are assumed to be correct and to have
    correct CRCs.
 
--- Although muZCat can uncompress multiple files, file names are not
+-- Although muZCat can decompress multiple files, file names are not
    preserved. Not even file boundaries are preserved: the output, STDOUT is
    the silent concatenation of the output files. (Improving this
    should be fairly easy, see muzcat.c.)
 
-2c. How is muZCat different from other Flate uncompressors?
+2c. How is muZCat different from other Flate decompressors?
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""
-Flate uncompressors known to the author:
+Flate decompressors known to the author:
 
 -- gunzip: GNU gunzip: the gunzip(1) utility, `gunzip -c', `gzip -cd', `zcat'.
 -- unzip: Info-Zip's unzip: the unzip(1) utility.
@@ -70,12 +70,12 @@ Flate uncompressors known to the author:
 
 Compared features:
 
--- gz: can uncopress gzip .gz files
--- zip1: can uncompress the first file of the .zip file
--- zipall: can uncompress all files of the .zip file
--- zipname: multiple files uncompressed from .zip, with correct file names
--- fe: can uncompress ZLIB (PostScript /FlateEncode-d) files
--- concat: can uncompress the concatenation of multiple compressed files
+-- gz: can decompress gzip .gz files
+-- zip1: can decompress the first file of the .zip file
+-- zipall: can decompress all files of the .zip file
+-- zipname: multiple files decompressed from .zip, with correct file names
+-- fe: can decompress ZLIB (PostScript /FlateEncode-d) files
+-- concat: can decompress the concatenation of multiple compressed files
 
 Programs and features joined, grouped by program:
 
@@ -224,7 +224,7 @@ Just instert the character 4 (Ctrl-D) into the input stream. For example:
 
 9. Why did you use `36000 array' in vm.ps?
 """"""""""""""""""""""""""""""""""""""""""
-Because the uncompressor bytecode needs an array of >=16-bit (signed or
+Because the decompressor bytecode needs an array of >=16-bit (signed or
 unsigned) integers of length 36000. Actually `20000 array' would have been
 enough because it needs around 32000 8-bit bytes and 4000 16-bit values.
 But, to make it faster and simpler, I've done it this way.
@@ -240,7 +240,7 @@ Some comparison benchmarks for integer array memory implementations:
 	% 0.05:     6s     54000bytes (??)
 
 Note that method `string1' allows only values 0..255 (and not 0..65535) so
-it is incapable for running the muZCat uncompression algorithm.
+it is incapable for running the muZCat decompression algorithm.
 
 muZCat 0.05 is trickier: the buffer `char S[32768]' is stored in a string,
 and others are stored in an array2. So we get both superior speed and
