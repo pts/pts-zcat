@@ -353,6 +353,20 @@ After that comes the CRC32 and ISIZE (byte aligned? ?)
 
 (There are 3 other possibilities.)
 
+12. Can muZCat decompress .bz2 (BZIP2) or .rar files?
+"""""""""""""""""""""""""""""""""""""""""""""""""""""
+No, these files use a different compression algorithm.
+
+12. Can muZCat decompress .7z, .xz or .lzma files?
+""""""""""""""""""""""""""""""""""""""""""""""""""
+No, these files use a different compression algorithm.
+
+See https://github.com/pts/muxzcat for a tiny decompressor of .xz
+and .lzma files implemented in C.
+
+See https://github.com/pts/pts-tiny-7z-sfx for a tiny extractor and
+self-extractor for .7z archives.
+
 99. ChangeLog, CHANGES, Revision history
 """"""""""""""""""""""""""""""""""""""""
 0.04 stable, working
