@@ -1980,6 +1980,9 @@
   #define DECR(r) ((r)--)
 
   /* vvv Linux kernel magic */  
+  #ifndef __i386__
+  #error i386 architecture expected, try gcc -m32
+  #endif
   #define __NR_myexit 1
   #define __NR_read 3
   #define __NR_write 4
