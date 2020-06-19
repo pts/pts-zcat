@@ -2036,13 +2036,11 @@
   }
 
   static void fvMain(void);
-  int _start(int argc, char **argv);
-  int _start(int argc, char **argv) {
-    (void)argc; (void)argv;
+  void _start(void);
+  void _start(void) {
     fvMain();
     flush_putchar(0); /* flush remaining bytes to STDOUT */
     myexit(0);
-    return 0;
   }
 #elif CFG_LANG_ANSICAD
   /* Sun Nov 11 12:19:08 CET 2001

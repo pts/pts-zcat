@@ -1,7 +1,7 @@
 #!/bin/sh --
 set -ex
-# -DCFG_LANG_ANSIC_SYSCALL would also work, but it is 32 bytes larger.
-xtiny gcc -DCFG_LANG_ANSIC_LINUX -s -Os -W -Wall -Wextra -Werror -Wstrict-prototypes -o muzcat.xtiny muzcat.c
+# Use -DCFG_LANG_ANSIC_LINUX for an even smaller binary output.
+xtiny gcc -DCFG_LANG_ANSIC_SYSCALL -s -Os -W -Wall -Wextra -Werror -Wstrict-prototypes -o muzcat.xtiny muzcat.c
 ls -ld muzcat.xtiny
 cp -a muzcat.xtiny a.out
 rm -f test; time ./a.out <testdata/bash.file.zip >test ; cmp testdata/bash.file test
