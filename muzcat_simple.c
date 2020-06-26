@@ -12,6 +12,7 @@
  *
  * * Source code is compatible with C89, C99 and newer. GCC, Clang and TinyCC
  *   do work. 16-bit C compilers should also work.
+ * * Source code is compatible with owccdos (http://github.com/pts/owccdos).
  * * Source code isn't compatible with MesCC in GNU Mes 0.22, because MesCC
  *   doesn't support global arrays (initialized or uninitialized). Apart from
  *   that, it would compile.
