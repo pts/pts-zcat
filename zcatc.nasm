@@ -84,9 +84,9 @@ cpu 8086
 BASE equ 0x100
 org BASE  ; For DOS .com program.
 
-NUL equ 0  ; ASCI NUL == '\0'.
-CR equ 13  ; ASCII CR == '\r'.
-LF equ 10  ; ASCII LF == '\n'.
+NUL equ 0  ; ASCII NUL == '\0'.
+CR equ 13  ; ASCII CR  == '\r'.
+LF equ 10  ; ASCII LF  == '\n'.
 
 STDIN_FILENO equ 0
 STDOUT_FILENO equ 1
