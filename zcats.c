@@ -5,11 +5,10 @@
  * Compile for Unix with GCC, for decompressing gzip and raw Deflate: gcc -s -O2 -W -Wall -Werror -ansi -pedantic -o zcats zcats.c
  * Compile for Unix with GCC, for decompressing gzip and zlib: gcc -s -O2 -W -Wall -Werror -ansi -pedantic -DUSE_ZLIB -o zlcats zcats.c
  * Compile for Linux i386 and FreeBSD i386 with https://github.com/pts/minilibc686 : minicc -bfreebsdx -ansi -pedantic -o zcats.mini zcats.c
- * Compile for tiny DOS 8086 .com with doscc.sh: ./doscc.sh -o zcatsc.com zcats.c
- * Compile for DOS 8086 .com with OpenWatcom: owcc -bcom -s -Os -fno-stack-check -march=i086 -W -Wall -Wextra -Werror -std=c89 -o zcatsd.com zcats.c
- * Compile for DOS 8086 .exe with OpenWatcom: owcc -bdos -mcmodel=s -s -Os -mstack-size=0x300 -fno-stack-check -march=i086 -W -Wall -Wextra -Werror -std=c89 -o zcatsd.exe zcats.c
- * Compile for DOS 8086 .exe with Turbo C++ 1.x: tcc.exe -ms -O -f- -a -w -w-rch -ezcatsd.exe zcats.c
- * Compile for DOS 8086 large .exe with OpenWatcom, large .exe and memory usage: owcc -bdos -mcmodel=s -s -Os -mstack-size=0x400 -fno-stack-check -march=i086 -W -Wall -Wextra -Werror -std=c89 -o zcatsm.exe zcats.c
+ * Compile to tiny DOS 8086 .com with OpenWatcom: wcc -q -bt=com -D_DOSCOMSTART -os -zl -j -ms -s -W -w4 -wx -we -wcd=201 -za -oi -0 -g=DGROUP -fo=.o zcats.c && wlink op q form dos com op d op nored op start=_comstart_ n zcatsc.com f zcats.o
+ * Compile to DOS 8086 .com with OpenWatcom: owcc -bcom -s -Os -fno-stack-check -march=i086 -W -Wall -Wextra -Werror -std=c89 -o zcatsd.com zcats.c
+ * Compile to DOS 8086 .exe with OpenWatcom: owcc -bdos -mcmodel=s -s -Os -mstack-size=0x300 -fno-stack-check -march=i086 -W -Wall -Wextra -Werror -std=c89 -o zcatsd.exe zcats.c
+ * Compile to DOS 8086 .exe with Turbo C++ 1.x: tcc.exe -ms -O -f- -a -w -w-rch -ezcatsd.exe zcats.c
  * Compile for Win32: owcc -bwin32 -Wl,runtime -Wl,console=3.10 -s -Os -fno-stack-check -march=i386 -W -Wall -Wextra -Werror -Wno-n201 -std=c89 -o zcatsw.exe zcats.c
  * Compile for Win32 with https://github.com/pts/bakefat mmlibc386: mmlibcc.sh -bwin32 -o zcats.exe zcats.c
  * It can't be compiled with Microsoft C compiler 6.00a for DOS 8086, because identifier lengths are longer than 31 bytes.
@@ -54,6 +53,75 @@
 #  ifndef USE_ZLIB
 #    define USE_DEFLATE 1  /* Default. */
 #  endif
+#endif
+
+#if defined(_DOSCOMSTART) && !defined(LIBC_PREINCLUDED)
+  /* Tiny libc for OpenWatcom C compiler creating a DOS 8086 .com program.
+   * For compilation instructions, see _DOSCOMSTART above.
+   */
+#  define LIBC_PREINCLUDED 1
+  /* This must be put to a separate function than _comstart, otherwise wlink
+   * wouldn't remove these 0x100 bytes from the beginning of the DOS .com
+   * program.
+   */
+  __declspec(naked) void __watcall _nuls(void) { __asm { db 100h dup (?) } }
+
+  extern char _edata[], _end[];
+  extern void __watcall main0(void);
+  /* It must not modify `bp', otherwise the OpenWatcom C compiler omits the
+   * `pop bp' between the `mov sp, bp' and the `ret'.
+   */
+#  pragma aux main0 __modify [__ax __bx __cx __dx __si __di __es]
+
+  /* This entry point function must be the first function defined in the .c
+   * file, because the entry point of DOS .com programs is at the beginning.
+   *
+   * This function zero-initializes _BSS, then jumps to main0. When main0
+   * returns, it will do a successful exit(0). If _BSS is missing (no matter
+   * how long _DATA is), then both _end and _edata are NULL here, but that's
+   * fine here.
+   */
+  __declspec(naked) void __watcall _comstart(void) {
+      __asm { xor ax, ax }
+      __asm { mov di, offset _edata } __asm { mov cx, offset _end }
+      __asm { sub cx, di } __asm { rep stosb } __asm { jmp main0 } }
+
+  /* At the end, the `ret' instruction will exit(0) the DOS .com program. */
+#  define main0() void __watcall main0(void)
+#  define main0_exit0() do {} while (0)
+#  define main0_exit(exit_code) _exit(exit_code)
+
+#  define LIBC_HAVE_WRITE_NONZERO_VOID 1
+  /* Like write(...), but count must be nonzero, and it returns void. */
+  static void write_nonzero_void(int fd, const void *buf, unsigned int count);
+#  pragma aux write_nonzero_void = "mov ah, 40h"  "int 21h" \
+      __parm [__bx] [__dx] [__cx] __modify [__ax]
+
+#  define LIBC_HAVE_WRITE_NONZERO 1
+  /* Like write(...), but count must be nonzero. */
+  int write_nonzero(int fd, const void *buf, unsigned int count);
+#  pragma aux write_nonzero = "mov ah, 40h"  "int 21h"  "jnc ok"  \
+      "mov ax, -1"  "ok:"  \
+      __value [__ax] __parm [__bx] [__dx] [__cx] __modify __exact [__ax]
+
+  int write(int fd, const void *buf, unsigned count);
+#  pragma aux write = "xor ax, ax"  "jcxz ok"  "mov ah, 40h"  "int 21h" \
+      "jnc ok"  "mov ax, -1"  "ok:"  \
+      __value [__ax] __parm [__bx] [__dx] [__cx] __modify __exact [__ax]
+
+  int read(int fd, void *buf, unsigned int count);
+#  pragma aux read = "mov ah, 3fh"  "int 21h"  "jnc ok"  "mov ax, -1"  "ok:" \
+      __value [__ax] __parm [__bx] [__dx] [__cx] __modify __exact [__ax]
+
+  __declspec(noreturn) void exit(unsigned char exit_code);
+#  pragma aux exit = "mov ah, 4ch"  "int 21h" \
+      __parm [__al] __modify __exact []
+
+  unsigned int strlen(const char *s);
+  /* To prevent wlink: Error! E2028: strlen_ is an undefined reference */
+#  pragma intrinsic(strlen)  /* !! Add shorter `#pragma aux' or static. */
+  void *memset(void *s, int c, unsigned int n);
+#  pragma intrinsic(memset)  /* !! Add shorter `#pragma aux' or static. */
 #endif
 
 #ifndef LIBC_PREINCLUDED
@@ -335,11 +403,11 @@ static void build_huffman_tree(const huffman_bit_count_t *bit_count_ary_ptr, uns
 }
 
 #ifndef main0
-#  define main0 int main
+#  define main0() int main(void)
 #  define main0_exit0() return EXIT_SUCCESS
 #endif
 
-main0(void) {
+main0() {
   uc8 b, flg;
   unsigned int i;
   uc8 *out;
