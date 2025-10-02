@@ -8,7 +8,7 @@
 ; Compile, for decompressing gzip and zlib: nasm-0.98.39 -O0 -w+orphan-labels -DUSE_ZLIB -f bin -o zlcatc.com zcatc.nasm
 ; This program compiles identically with optimized (-O32700) and unoptimized (-0) NASM.
 ;
-; Program size: The DOS 8086 .com program zcatc.com is 966 bytes. It's
+; Program size: The DOS 8086 .com program zcatc.com is 960 bytes. It's
 ; written in manually optimized 8086 assembly in the NASM syntax. The
 ; feature-equivalent C program, zcats.c can be compiled to DOS 8086 .com
 ; program of 1624 byes with OpenWatcom C compiler and a custom tiny libc.
@@ -193,12 +193,6 @@ _start:  ; Entry point of DOS .com program.
 %else  ; Use raw Deflate: https://www.rfc-editor.org/rfc/rfc1951.txt
 		inc word [bp+gsmall.read_buffer_remaining]
 		dec word [bp+gsmall.read_ptr]
-  %if 1  ; This is 1 byte shorter, but it works only for the first byte, i.e. if read_ptr == global.read_buffer.
-		mov [global.read_buffer], al  ; Put the just-read byte back to the read buffer so that the Deflate decompressor (.decompress_deflate below) can read it.
-  %else
-		mov di, [bp+gsmall.read_ptr]
-		stosb  ; Put the just-read byte back to the read buffer so that the Deflate decompressor (.decompress_deflate below) can read it.
-  %endif
 %endif
 .after_enchdr:
 .decompress_deflate:  ; Raw Deflate: https://www.rfc-editor.org/rfc/rfc1951.txt
@@ -398,7 +392,7 @@ _start:  ; Entry point of DOS .com program.
 		jb short .is_17  ; This can be converted to ja ....ja_fatal_corrupted_input if needed.
 		je short .is_18
 .jmp_fatal_corrupted_input2:
-		jmp near fatal_corrupted_input
+		jmp short .ja_fatal_corrupted_input3
 .is_17:
 		call read_bits_3
 		;add al, 3  ; AX (count) := read_bits_max_8(3) + 3 - 3. We will add the +3 later.
@@ -609,8 +603,7 @@ build_huffman_tree_RUINS:
 		jne short .init_leaf_done  ; Jump iff node_ptr[0] != LEAF_PTR.
 		mov [bx], di  ; node_ptr[0] = DI (tree_free_ptr).
 		stosw  ; *tree_free_ptr++ = LEAF_PTR.
-		times 2 inc di  ; Skip setting the value of child 0 to BAD_LEAF_VALUE, because the next iteration in the first descent will overwrite it anyway.
-		;stosw  ; Shorter and slower than `times 2 inc di' above, and setting the value to anything doesn't hurt.
+		stosw  ; Shorter and slower than `times 2 inc di' above, and setting the value to anything doesn't hurt.
 		mov [bx+2], di  ; node_ptr[1] = tree_free_ptr.
 		stosw  ; *tree_free_ptr++ = LEAF_PTR.
 %if ((LEAF_PTR-1)&0xffff)==(BAD_LEAF_VALUE&0xffff)  ; Usually true.
@@ -759,7 +752,7 @@ read_byte:
 		push cx  ; Save.
 		push dx  ; Save.
 		mov ah, 0x3f  ; DOS syscall number for read using handle.
-		mov bx, STDIN_FILENO
+		xor bx, bx  ; STDIN_FILENO == 0.
 		mov cx, READ_BUFFER_SIZE
 		mov dx, global.read_buffer
 		int 0x21  ; DOS syscall.
