@@ -8,7 +8,7 @@
 ; Compile, for decompressing gzip and zlib: nasm-0.98.39 -O0 -w+orphan-labels -DUSE_ZLIB -f bin -o zlcatc.com zcatc.nasm
 ; This program compiles identically with optimized (-O32700) and unoptimized (-0) NASM.
 ;
-; Program size: The DOS 8086 .com program zcatc.com is 966 bytes. It's
+; Program size: The DOS 8086 .com program zcatc.com is 962 bytes. It's
 ; written in manually optimized 8086 assembly in the NASM syntax. The
 ; feature-equivalent C program, zcats.c can be compiled to DOS 8086 .com
 ; program of 1624 byes with OpenWatcom C compiler and a custom tiny libc.
@@ -77,6 +77,8 @@
 ; * Run the big test with >42000 .gz files for both zcatc.nasm and zcats.c.
 ;
 ; TODO(pts): Add support for multiple gzip streams (such as in Alpine Linux APKINDEX.*.tar.gz); both gzip and muzcat support multiple streams; for that we need EOF detection.
+;
+; !! Calculate (1 << i) - 1 using a lookup table (lut_pow2_mask). Is it shorter?
 ;
 
 bits 16
@@ -193,9 +195,10 @@ _start:  ; Entry point of DOS .com program.
 %else  ; Use raw Deflate: https://www.rfc-editor.org/rfc/rfc1951.txt
 		inc word [bp+gsmall.read_buffer_remaining]
 		dec word [bp+gsmall.read_ptr]
-  %if 1  ; This is 1 byte shorter, but it works only for the first byte, i.e. if read_ptr == global.read_buffer.
+  %if 1  ; We have to put back the byte in AL to the beginning of global_read_buffer. But it's already there, so we on't do anything.
+  %elif 0  ; This is 1 byte shorter, but it works only for the first byte, i.e. if read_ptr == global.read_buffer.
 		mov [global.read_buffer], al  ; Put the just-read byte back to the read buffer so that the Deflate decompressor (.decompress_deflate below) can read it.
-  %else
+  %elif 0
 		mov di, [bp+gsmall.read_ptr]
 		stosb  ; Put the just-read byte back to the read buffer so that the Deflate decompressor (.decompress_deflate below) can read it.
   %endif
@@ -398,6 +401,7 @@ _start:  ; Entry point of DOS .com program.
 		jb short .is_17  ; This can be converted to ja ....ja_fatal_corrupted_input if needed.
 		je short .is_18
 .jmp_fatal_corrupted_input2:
+		; Changing this to `jmp short .ja_fatal_corrupted_input3' would introduce a bug for code jumping to here (.jmp_fatal_corrupted_input2), because the jump at  .ja_fatal_corrupted_input3 is a `ja' rather than a `jmp', so it wouldn't always jump.
 		jmp near fatal_corrupted_input
 .is_17:
 		call read_bits_3
@@ -610,7 +614,7 @@ build_huffman_tree_RUINS:
 		mov [bx], di  ; node_ptr[0] = DI (tree_free_ptr).
 		stosw  ; *tree_free_ptr++ = LEAF_PTR.
 		times 2 inc di  ; Skip setting the value of child 0 to BAD_LEAF_VALUE, because the next iteration in the first descent will overwrite it anyway.
-		;stosw  ; Shorter and slower than `times 2 inc di' above, and setting the value to anything doesn't hurt.
+		;stosw  ; This is an intentially missed size optimization opportunity. Keeping the longer version above instead for speed. This code is shorter and slower than `times 2 inc di' above, and setting the value to anything doesn't hurt.
 		mov [bx+2], di  ; node_ptr[1] = tree_free_ptr.
 		stosw  ; *tree_free_ptr++ = LEAF_PTR.
 %if ((LEAF_PTR-1)&0xffff)==(BAD_LEAF_VALUE&0xffff)  ; Usually true.
@@ -759,7 +763,11 @@ read_byte:
 		push cx  ; Save.
 		push dx  ; Save.
 		mov ah, 0x3f  ; DOS syscall number for read using handle.
+%if STDIN_FILENO  ; False, added for completeness only.
 		mov bx, STDIN_FILENO
+%else
+		xor bx, bx  ; BX := STDIN_FILENO.
+%endif
 		mov cx, READ_BUFFER_SIZE
 		mov dx, global.read_buffer
 		int 0x21  ; DOS syscall.
