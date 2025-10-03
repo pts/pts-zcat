@@ -1,5 +1,5 @@
 ;
-; zcatc.nasm: tiny stdin-to-stdout decompression filter implementation of the gzip, zlib and Deflate file formats for DOS 8086 in NASM assembly
+; zcatc.nasm: tiny stdin-to-stdout decompression filter implementation of the gzip, zlib, Deflate and Quasijarus strong file formats for DOS 8086 in NASM assembly
 ; by pts@fazekas.hu at Fri Sep 26 00:32:20 CEST 2025
 ;
 ; Usage: zcatc <file.gz >file
@@ -55,13 +55,19 @@
 ; NASM configuration options at compile time:
 ;
 ; * `-DUSE_DEFLATE` (default): As input, support the
-;   [gzip](https://www.rfc-editor.org/rfc/rfc1952.txt) and [raw
-;   Deflate](https://www.rfc-editor.org/rfc/rfc1951.txt) file format rather
-;   than the *.lzw file format.
+;   [gzip](https://www.rfc-editor.org/rfc/rfc1952.txt), [raw
+;   Deflate](https://www.rfc-editor.org/rfc/rfc1951.txt) and
+;   [4.3BSD-Quasijarus strong
+;   compression](http://fileformats.archiveteam.org/wiki/Quasijarus_Strong_Compression)
+;   file formats. It doesn't support zlib, and conflicts with
+;   `-DUSE_ZLIB`.
 ; * `-DUSE_ZLIB`: As input, support the
-;   [gzip](https://www.rfc-editor.org/rfc/rfc1952.txt) and
-;   [zlib](https://www.rfc-editor.org/rfc/rfc1950.txt) file formats rather
-;   than the *.lzw file format.
+;   [gzip](https://www.rfc-editor.org/rfc/rfc1952.txt),
+;   [zlib](https://www.rfc-editor.org/rfc/rfc1950.txt) and
+;   [4.3BSD-Quasijarus strong
+;   compression](http://fileformats.archiveteam.org/wiki/Quasijarus_Strong_Compression)
+;   file formats. It doesn't support raw Deflate, and conflicts with
+;   `-DUSE_DEFLATE`.
 ; * `-DUSE_NZTREELEAF`: Use a non-zero `TREE_LEAF` value; this helps
 ;   debugging of the Huffman tree builder.
 ; * `-DUSE_SCRAMBLECODE`: Use code to compute the bit count RLE code
@@ -132,6 +138,8 @@ _start:  ; Entry point of the DOS .com program.
 		cmp al, 0x1f
 		jne short .not_gzip_id1  ; ID1 byte, must be 0x1f for gzip.
 		call read_byte  ; ID2 byte.
+		cmp al, 0xa1
+		je short .decompress_deflate  ; 4.3BSD-Quasijarus strong compression (compress -s) produces the 0x1f 0xa1 header and then raw Deflate.
 		cmp al, 0x8b
 		jne short .jmp_fatal_corrupted_input1  ; ID2 byte, must be 0x8b.
 		call read_byte

@@ -1,5 +1,5 @@
 /*
- * zcats.c: simple stdin-to-stdout decompression filter implementation of the gzip, zlib and Deflate file formats in ANSI C (C89) and C++98
+ * zcats.c: simple stdin-to-stdout decompression filter implementation of the gzip, zlib, Deflate and Quasijarus strong file formats file formats in ANSI C (C89) and C++98
  * by pts@fazekas.hu at Fri Sep 26 00:32:20 CEST 2025
  *
  * Compile for Unix with GCC, for decompressing gzip and raw Deflate: gcc -s -O2 -W -Wall -Werror -ansi -pedantic -o zcats zcats.c
@@ -40,9 +40,22 @@
  *
  * C compiler configuration options (`#ifdef`s):
  *
- * * `-DUSE_DEFLATE` (default): as input, support the [gzip](https://www.rfc-editor.org/rfc/rfc1952.txt) and [raw Deflate](https://www.rfc-editor.org/rfc/rfc1951.txt) file format rather than the *.lzw file format.
- * * `-DUSE_ZLIB`: as input, support the [gzip](https://www.rfc-editor.org/rfc/rfc1952.txt) and [zlib](https://www.rfc-editor.org/rfc/rfc1950.txt) file formats rather than the *.lzw file format.
- * * `-DUSE_NZTREELEAF`: use a non-zero `TREE_LEAF` value; this helps debugging of the Huffman tree builder
+ * * `-DUSE_DEFLATE` (default): As input, support the
+ *   [gzip](https://www.rfc-editor.org/rfc/rfc1952.txt), [raw
+ *   Deflate](https://www.rfc-editor.org/rfc/rfc1951.txt) and
+ *   [4.3BSD-Quasijarus strong
+ *   compression](http://fileformats.archiveteam.org/wiki/Quasijarus_Strong_Compression)
+ *   file formats. It doesn't support zlib, and conflicts with
+ *   `-DUSE_ZLIB`.
+ * * `-DUSE_ZLIB`: As input, support the
+ *   [gzip](https://www.rfc-editor.org/rfc/rfc1952.txt),
+ *   [zlib](https://www.rfc-editor.org/rfc/rfc1950.txt) and
+ *   [4.3BSD-Quasijarus strong
+ *   compression](http://fileformats.archiveteam.org/wiki/Quasijarus_Strong_Compression)
+ *   file formats. It doesn't support raw Deflate, and conflicts with
+ *   `-DUSE_DEFLATE`.
+ * * `-DUSE_NZTREELEAF`: use a non-zero `TREE_LEAF` value; this helps
+ *   debugging of the Huffman tree builder.
  */
 
 #ifdef USE_DEFLATE
@@ -431,7 +444,8 @@ main0() {
 #endif
   if ((b = read_byte()) == 0x1f) {  /* gzip: https://www.rfc-editor.org/rfc/rfc1952.txt */
     /* First byte (b) is ID1, must be 0x1f. */
-    if ((b = read_byte()) != 0x8b) fatal(FATAL_CORRUPTED_INPUT);  /* ID2 byte, must be 0x8b. */
+    if ((b = read_byte()) == 0xa1) goto end_of_header;  /* 4.3BSD-Quasijarus strong compression (compress -s) produces the 0x1f 0xa1 header and then raw Deflate. */
+    if (b != 0x8b) fatal(FATAL_CORRUPTED_INPUT);  /* ID2 byte, must be 0x8b. */
     if ((b = read_byte()) != 8) fatal(FATAL_CORRUPTED_INPUT);  /* CM byte. Check that CM == 8. */
     flg = read_byte();  /* FLG byte. */
     for (i = 6; i-- != 0; ) {
@@ -455,6 +469,7 @@ main0() {
         read_byte();
       }
     }
+   end_of_header: ;
   } else {
 #ifdef USE_ZLIB  /* zlib: https://www.rfc-editor.org/rfc/rfc1950.txt */
     if ((b & 0xf) != 8 || (b >> 4) > 7) fatal(FATAL_CORRUPTED_INPUT);  /* CM byte. Check that CM == 8, check that CINFO <= 7, otherwise ignore CINFO (sliding window size). */
