@@ -478,8 +478,12 @@ main0() {
     if ((b & 0xf) != 8 || (b >> 4) > 7) fatal(FATAL_CORRUPTED_INPUT);  /* CM byte. Check that CM == 8, check that CINFO <= 7, otherwise ignore CINFO (sliding window size). */
     if (((b = read_byte()) & 0x20)) fatal(FATAL_CORRUPTED_INPUT);  /* FLG byte. Check that FDICT == 0. Ignore FLEVEL and FCHECK. */
 #else
-    global_read_buffer_remaining++;
+    ++global_read_buffer_remaining;
+#  if 1  /* Shorter, b is already in global_read_buffer. */
+    --global_read_idx;
+#  else
     global_read_buffer[--global_read_idx] = b;  /* Put it back (ungetc(b)) for the Deflate decompressor. */
+#  endif
 #endif
   }
   out = global_write_buffer;
