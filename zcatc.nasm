@@ -282,7 +282,7 @@ _start:  ; Entry point of the DOS .com program.
 		mov cl, 30  ; CX := 30.
 		mov al, 5
 		rep stosb
-		mov dx, 288  ; BX (literal_and_len_size) := 288.
+		mov dx, 288  ; DX (literal_and_len_size) := 288.
 		mov cl, 30  ; CX (distance_size) := 30.
 		mov di, global.huffman_trees_ary
 		jmp near .common_compressed_block
