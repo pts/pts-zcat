@@ -128,9 +128,9 @@ _start:  ; Entry point of the DOS .com program.
 		mov bp, di  ; BP := global_uninitvars. BP remains the same throughout the program, and can be used for GSMALL(...) addressing.
 
 .try_gzip:  ; gzip: https://www.rfc-editor.org/rfc/rfc1952.txt
-		call clear_read_buffer_and_read_byte  ; ID1 byte.
+		call clear_read_buffer_and_read_byte  ; gzip ID1 byte.
 		cmp al, 0x1f
-		jne short .not_gzip  ; ID1 byte, must be 0x1f for gzip.
+		jne short .not_gzip_id1  ; ID1 byte, must be 0x1f for gzip.
 		call read_byte  ; ID2 byte.
 		cmp al, 0x8b
 		jne short .jmp_fatal_corrupted_input1  ; ID2 byte, must be 0x8b.
@@ -170,13 +170,15 @@ _start:  ; Entry point of the DOS .com program.
 .after_fcomment:
 		; Now we could ignore the 2-byte CRC16 if (flg & 2), but we've disallowed it above.
 		test bl, 0x20
-		jz short .after_enchdr  ; Ignore gzip(1) the encryption header.
+		jz short .after_enchdr  ; Ignore the gzip(1) encryption header.
 		mov cl, 12  ; CX := 12. CH was already 0.
 .next_ignore5:
 		call read_byte  ; Ignore MTIME (4 bytes), XFL (1 byte) and OS (1 byte).
 		loop .next_ignore5
-.not_gzip:
 %ifdef USE_ZLIB  ; zlib: https://www.rfc-editor.org/rfc/rfc1950.txt
+.after_enchdr:
+		jmp short .decompress_deflate
+.not_gzip_id1:
 		cmp al, 0x80  ; CM byte. Check that CINFO <= 7, otherwise ignore CINFO (sliding window size).
 		jae short .jmp_fatal_corrupted_input1
 		and al, 0xf
@@ -186,6 +188,7 @@ _start:  ; Entry point of the DOS .com program.
 		test al, 0x20
 		jnz short .jmp_fatal_corrupted_input1  ; FLG byte. Check that FDICT == 0. Ignore FLEVEL and FCHECK.
 %else  ; Use raw Deflate: https://www.rfc-editor.org/rfc/rfc1951.txt
+.not_gzip_id1:
 		dec word GSMALL(read_ptr)
   %if 1  ; We have to put back the byte in AL to the beginning of global_read_buffer. But it's already there, so we on't do anything.
   %elif 0  ; This is 1 byte shorter, but it works only for the first byte, i.e. if read_ptr == global.read_buffer.
@@ -194,8 +197,8 @@ _start:  ; Entry point of the DOS .com program.
 		mov di, GSMALL(read_ptr)
 		stosb  ; Put the just-read byte back to the read buffer so that the Deflate decompressor (.decompress_deflate below) can read it.
   %endif
-%endif
 .after_enchdr:
+%endif
 .decompress_deflate:  ; Raw Deflate: https://www.rfc-editor.org/rfc/rfc1951.txt
 		mov di, global.write_buffer  ; Will be used as the `out' variable through the Deflate decompression except when starting a compressed block.
 .end_of_block:
