@@ -135,6 +135,8 @@
 #  pragma intrinsic(strlen)  /* !! Add shorter `#pragma aux' or static. */
   void *memset(void *s, int c, unsigned int n);
 #  pragma intrinsic(memset)  /* !! Add shorter `#pragma aux' or static. */
+
+#  define STRLIT_NL "\r\n"  /* Line ending for error messages on stderr. */
 #endif
 
 #ifndef LIBC_PREINCLUDED
@@ -151,6 +153,7 @@
 #      include <unistd.h>  /* read(...), write(...). */
 #    endif
 #  endif
+#  define STRLIT_NL "\n"  /* On DOS etc. write(STDERR_FILENO) will append an "\r" because the lack of O_BINARY. */
 #endif
 
 #if defined(__TURBOC__) && defined(__MSDOS__)
@@ -236,7 +239,7 @@ typedef um8 huffman_bit_count_t;
 #endif
 #define BAD_LEAF_VALUE ((um16)-1)
 
-static const char * const global_error_msgs[3] = { "read error\n", "write error\n", "corrupted input\n" };
+static const char * const global_error_msgs[3] = { "read error" STRLIT_NL, "write error" STRLIT_NL, "corrupted input" STRLIT_NL };
 
 static uc8 global_write_buffer[0x8000U];
 static uc8 global_read_buffer[0x2000];
