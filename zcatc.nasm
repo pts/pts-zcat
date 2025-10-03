@@ -8,7 +8,7 @@
 ; Compile, for decompressing gzip and zlib: nasm-0.98.39 -O0 -w+orphan-labels -DUSE_ZLIB -f bin -o zlcatc.com zcatc.nasm
 ; This program compiles identically with optimized (-O32700) and unoptimized (-0) NASM.
 ;
-; Program size: The DOS 8086 .com program zcatc.com is 962 bytes. It's
+; Program size: The DOS 8086 .com program zcatc.com is 958 bytes. It's
 ; written in manually optimized 8086 assembly in the NASM syntax. The
 ; feature-equivalent C program, zcats.c can be compiled to DOS 8086 .com
 ; program of 1624 byes with OpenWatcom C compiler and a custom tiny libc.
@@ -78,7 +78,7 @@
 ;
 ; TODO(pts): Add support for multiple gzip streams (such as in Alpine Linux APKINDEX.*.tar.gz); both gzip and muzcat support multiple streams; for that we need EOF detection.
 ;
-; !! Calculate (1 << i) - 1 using a lookup table (lut_pow2_mask). Is it shorter?
+; !! Calculate (1 << i) - 1 using a lookup table (lut_pow2_mask) in read_bits_max_8 (4-byte instruction with the right registers). Is it shorter? Probably not.
 ;
 
 bits 16
@@ -113,29 +113,22 @@ BAD_LEAF_VALUE equ 0xffff
 READ_BUFFER_SIZE equ 0x2000  ; Any postive value works, but values smaller than 0x1000 make the program slow because of increased system call overhead.
 WRITE_RING_BUFFER_SIZE equ 0x8000  ; This is the maximum size (32 KiB) specified in https://www.rfc-editor.org/rfc/rfc1951.txt .
 
-gsmall:  ; Global small (non-array) variables, indexed using [bp+gsmall....].
-.read_buffer_remaining: equ -2  ; unsigned short. Initialized to 0.
-.bitbuf_bits_remaining: equ -3  ; unsigned char. Initialized to 0. Always 0..7. This must be exactly 1 byte after .bitbuf, for read_using_huffman_tree and read_bits_max_8.
-.bitbuf: equ -4  ; unsigned char.  Initialized to 0.
-.match_distance_limit: equ -6  ; unsigned short. Initialized to 0.
-.read_ptr: equ -8  ; unsigned char*. Initial value arbitrary.
-.literal_and_len_root_ptr: equ -10  ; void**. Initial value arbitrary.
-.distance_root_ptr: equ -12  ; void**. Initial value arbitrary.
-.build_bit_count_histogram_and_g_ary: equ -44  ; unsigned short[16]. Used by build_huffman_tree_RUINS as temporary storage.
+; Small (non-array) global variables are indexed using GSMALL(...) instead of [...] to save 1 byte per use.
+%define GSMALL(label) [byte bp-global_uninitvars+label]
+%define IS_HISTOGRAM_THE_FIRST_UNINITVAR 1
 
 ; --- Code.
 
-_start:  ; Entry point of DOS .com program.
-		pop ax  ; AX := 0. For DOS .com programs, a 0 is always pushed to the stack at entry.
-		mov bp, sp
-		; A `mov cx, ... ++ rep stosw' wouldn't be shorter either.
-		push ax  ; read_buffer_remaining := 0.
-		push ax  ; bitbuf_bits_remaining := bitbuf := 0.
-		push ax  ; match_distance_limit := 0.
-		sub sp, byte 3*2+16*2  ; Initial value arbitrary for: read_ptr, literal_and_len_root_ptr, distance_root_ptr, build_bit_count_histogram_and_g_ary.
-		push ax  ; This 0 will be the return address of the fake exit(EXIT_SUCCESS) call in .end_of_block below. For DOS .com programs, it points to an `int 0x20' instruction set up by DOS when loading the program.
+_start:  ; Entry point of the DOS .com program.
+		xor ax, ax  ; AX := 0.
+		mov di, global_initvars
+		stosw  ; bitbuf_bits_remaining := bitbuf := 0.
+		stosw  ; match_distance_limit := 0.
+		; Now DI == global_uninitvars.
+		mov bp, di  ; BP := global_uninitvars. BP remains the same throughout the program, and can be used for GSMALL(...) addressing.
+
 .try_gzip:  ; gzip: https://www.rfc-editor.org/rfc/rfc1952.txt
-		call read_byte  ; ID1 byte.
+		call clear_read_buffer_and_read_byte  ; ID1 byte.
 		cmp al, 0x1f
 		jne short .not_gzip  ; ID1 byte, must be 0x1f for gzip.
 		call read_byte  ; ID2 byte.
@@ -193,13 +186,12 @@ _start:  ; Entry point of DOS .com program.
 		test al, 0x20
 		jnz short .jmp_fatal_corrupted_input1  ; FLG byte. Check that FDICT == 0. Ignore FLEVEL and FCHECK.
 %else  ; Use raw Deflate: https://www.rfc-editor.org/rfc/rfc1951.txt
-		inc word [bp+gsmall.read_buffer_remaining]
-		dec word [bp+gsmall.read_ptr]
+		dec word GSMALL(read_ptr)
   %if 1  ; We have to put back the byte in AL to the beginning of global_read_buffer. But it's already there, so we on't do anything.
   %elif 0  ; This is 1 byte shorter, but it works only for the first byte, i.e. if read_ptr == global.read_buffer.
 		mov [global.read_buffer], al  ; Put the just-read byte back to the read buffer so that the Deflate decompressor (.decompress_deflate below) can read it.
   %elif 0
-		mov di, [bp+gsmall.read_ptr]
+		mov di, GSMALL(read_ptr)
 		stosb  ; Put the just-read byte back to the read buffer so that the Deflate decompressor (.decompress_deflate below) can read it.
   %endif
 %endif
@@ -219,13 +211,12 @@ _start:  ; Entry point of DOS .com program.
 		; flushing. That's not a problem, because this extra junk
 		; byte will never get flushed.
 		;
-		; To exit, we've pushed (in _start above) the address (0) of
-		; the DOS exit(EXIT_SUCCESS) syscall code (`int 0x20', put
-		; at address 0 by DOS when loading the DOS .com program) to
-		; the stack, and we jump to (instead of calling)
-		; flush_write_buffer_and_write_byte. Thus the `ret' in the
-		; end of flush_write_buffer_and_write_byte will jump to
-		; address 0, and do an `int 0x20' to exit the program.
+		; To exit, we execute `int 0x20', which is a DOS syscall for
+		; exit(EXIT_SUCCESS). To do so, we jump to address 0, where
+		; DOS put the `int 0x20' instruction bytes when loading the
+		; program. The `ret' flush_write_buffer_and_write_byte does
+		; the jump to address 0, because DOS has also pushed the
+		; word 0 to the stack when loading the .com program.
 		jmp near flush_write_buffer_and_write_byte
 		; Not reached.
 .jmp_fatal_corrupted_input1:
@@ -247,7 +238,7 @@ _start:  ; Entry point of DOS .com program.
 		dec ax
 		jns .not_uncompressed_block
 .uncompressed_block:  ; Uncompressed block.
-		mov byte [bp+gsmall.bitbuf_bits_remaining], 0  ; Discard partially read byte.
+		mov byte GSMALL(bitbuf_bits_remaining), 0  ; Discard partially read byte.
 		call read_bits_16  ; LEN.
 		xchg cx, ax ; CX := LEN value; AX := junk.
 		call read_bits_16  ; NLEN.
@@ -258,10 +249,10 @@ _start:  ; Entry point of DOS .com program.
 		test cx, cx
 		jz short .end_of_block
 		js short .saturate_match_distance_limit1
-		add [bp+gsmall.match_distance_limit], cx
+		add GSMALL(match_distance_limit), cx
 		jns short .next_uncompressed_byte
 .saturate_match_distance_limit1:
-		mov word [bp+gsmall.match_distance_limit], 0x8000  ; Very large limit which won't ever be reached.
+		mov word GSMALL(match_distance_limit), 0x8000  ; Very large limit which won't ever be reached.
 .next_uncompressed_byte:
 		call read_byte
 		call write_byte  ; Write byte in AL to DI, update DI.
@@ -433,24 +424,24 @@ _start:  ; Entry point of DOS .com program.
 		push cx  ; Save distance_size.
 		mov si, global.huffman_bit_count_ary  ; SI (build_bit_count_ary_ptr) := global.huffman_bit_count_ary.
 		; Now: DX (build_size) is literal_and_len_size.
-		mov [bp+gsmall.literal_and_len_root_ptr], di
+		mov GSMALL(literal_and_len_root_ptr), di
 		call build_huffman_tree_RUINS  ; build_huffman_tree(global.huffman_bit_count_ary, literal_and_len_size, literal_and_len_root_ptr).  ; All literal_and_len elements are in 0..15. Also sets DI := new tree_free_ptr.
 		; Now: SI (build_bit_count_ary_ptr) is global.huffman_bit_count_ary+literal_and_len_size, as returned by the build_huffman_tree_RUINS above.
 		pop dx  ; Restore DX (build_size) := distance_size.
-		mov [bp+gsmall.distance_root_ptr], di
+		mov GSMALL(distance_root_ptr), di
 		call build_huffman_tree_RUINS  ; build_huffman_tree(global.huffman_bit_count_ary + literal_and_len_size, distance_size, distance_root_ptr).  ; All distance elements are in 0..15. Also sets DI := new tree_free_ptr.
 		pop di  ; Restore DI := out.
 .next_token:
-		mov bx, [bp+gsmall.literal_and_len_root_ptr]
+		mov bx, GSMALL(literal_and_len_root_ptr)
 		call read_using_huffman_tree  ; AX (token) := read_using_huffman_tree(literal_and_len_root_ptr);
 		sub ax, strict word 256
 		jb short .literal_token
 		jnz short .match_token
 		jmp near .end_of_block
 .literal_token:  ; LZ literal token.
-		cmp byte [bp+gsmall.match_distance_limit+1], 0x8000>>8
+		cmp byte GSMALL(match_distance_limit+1), 0x8000>>8
 		jnb short .match_distance_limit_ok_for_literal  ; Jump iff match_distance_limit >= 0x8000.
-		inc word [bp+gsmall.match_distance_limit]
+		inc word GSMALL(match_distance_limit)
 .match_distance_limit_ok_for_literal:
 		call write_byte  ; Write byte in AL to DI, update DI.
 %ifdef USE_DEBUG
@@ -488,7 +479,7 @@ _start:  ; Entry point of DOS .com program.
 .match_length_ok:
 		; Now we have the final value of match_length in AX: 1..258.
 		xchg dx, ax  ; DX (match_length) := AX (match_length); AX := junk.
-		mov bx, [bp+gsmall.distance_root_ptr]
+		mov bx, GSMALL(distance_root_ptr)
 		call read_using_huffman_tree  ; AX (match_distance) := read_using_huffman_tree(distance_root_ptr);
 		cmp al, 29
 .ja_fatal_corrupted_input1:
@@ -511,11 +502,11 @@ _start:  ; Entry point of DOS .com program.
 		call debug_lz_match
 %endif
 		inc ax
-		cmp ax, [bp+gsmall.match_distance_limit]
+		cmp ax, GSMALL(match_distance_limit)
 		ja short build_huffman_tree_RUINS.ja_fatal_corrupted_input4
-		add [bp+gsmall.match_distance_limit], dx
+		add GSMALL(match_distance_limit), dx
 		jns short .match_distance_limit_ok_for_match
-		mov word [bp+gsmall.match_distance_limit], 0x8000  ; Very large limit which won't ever be reached.
+		mov word GSMALL(match_distance_limit), 0x8000  ; Very large limit which won't ever be reached.
 .match_distance_limit_ok_for_match:
 		lea bx, [word di-(global.write_buffer-$$)-BASE]  ; BX := (DI-global.write_buffer)-1.
 		sub bx, ax  ; BX -= AX (match_distance).
@@ -553,7 +544,11 @@ build_huffman_tree_RUINS:
 %if LEAF_PTR  ; For the `rep stosw' below.
 		xor ax, ax
 %endif
-		lea di, [bp+gsmall.build_bit_count_histogram_and_g_ary]
+%if IS_HISTOGRAM_THE_FIRST_UNINITVAR  ; This is true, and it makes the code shorter.
+		mov di, bp  ; Short version of DI := address of build_bit_count_histogram_and_g_ary.
+%else
+		lea di, GSMALL(build_bit_count_histogram_and_g_ary)
+%endif
 		push di   ; Save address of bit_count_histogram_and_g_ary.
 		mov cx, 16
 		rep stosw  ; for (unsigned i = 0; i < 16; ++i) { bit_count_histogram_and_g_ary[i] = 0; }  ; Also sets CX := 0.
@@ -584,7 +579,7 @@ build_huffman_tree_RUINS:
 		pop di  ; Restore DI := tree_free_ptr. DI will be increased below, and the final value returned.
 		pop bx  ; Restore BX := build_root_ptr. Also initialize BX := build_bit_count_ary_ptr+size_i.
 		pop si  ; Restore SI := build_bit_count_ary_ptr.
-		; Now AX is junk (it will be used below); BX is build_root_ptr; CX is initial size_i, which is now 0; DX is initial build_size_remaining, which is now build_size; SI is initial build_bit_count_ary_ptr; DI is tree_free_ptr; BP is the address of end of gsmall.
+		; Now AX is junk (it will be used below); BX is build_root_ptr; CX is initial size_i, which is now 0; DX is initial build_size_remaining, which is now build_size; SI is initial build_bit_count_ary_ptr; DI is tree_free_ptr; BP is the address of global_uninitvars.
 .next_insert:
 		lodsb  ; AL (bit_count) := bit_count_ary_ptr[size_i]. SI (build_bit_count_ary_ptr+size_i) += 1.
 		cbw  ; AH := 0, because 0 <= AL <= 15.
@@ -596,12 +591,17 @@ build_huffman_tree_RUINS:
 		mov cl, al  ; CL := AL (bit_count).
 		xchg si, ax  ; SI := AX (bit_count); AX := junk. After this, 0 <= SI (bit_count) <= 28.
 		add si, si
-		mov dx,  [bp+gsmall.build_bit_count_histogram_and_g_ary+si]  ; DX (code) := bit_count_histogram_and_g_ary[bit_count].
-		inc word [bp+gsmall.build_bit_count_histogram_and_g_ary+si]  ; bit_count_histogram_and_g_ary[bit_count] += 1.
+%if IS_HISTOGRAM_THE_FIRST_UNINITVAR  ; This is true, and it makes the code shorter.
+		mov dx,  [bp+si]  ; DX (code) := bit_count_histogram_and_g_ary[bit_count].
+		inc word [bp+si]  ; bit_count_histogram_and_g_ary[bit_count] += 1.
+%else
+		mov dx,  GSMALL(build_bit_count_histogram_and_g_ary+si)  ; DX (code) := bit_count_histogram_and_g_ary[bit_count].
+		inc word GSMALL(build_bit_count_histogram_and_g_ary+si)  ; bit_count_histogram_and_g_ary[bit_count] += 1.
+%endif
 		mov si, 1  ; SI := 1.
 		shl si, cl  ; SI (code_mask_i) := 1 << bit_count.
 		pop cx  ; Restore CX := size_i.
-		; Now AX is junk (it will be used below); BX is build_root_ptr; CX is size_i; DX is code; SI is code_mask_i; DI is tree_free_ptr; BP is the address of end of gsmall.
+		; Now AX is junk (it will be used below); BX is build_root_ptr; CX is size_i; DX is code; SI is code_mask_i; DI is tree_free_ptr; BP is the address of end of global_uninitvars.
 %if LEAF_PTR
 		mov ax, LEAF_PTR  ; AX := LEAF_PTR.
 %else
@@ -656,11 +656,8 @@ build_huffman_tree_RUINS:
 ; Output: AX: the Huffman code value.
 ; Ruins BX, FLAGS; keeps all other registers intact.
 read_using_huffman_tree:
-%if gsmall.bitbuf_bits_remaining!=gsmall.bitbuf+1
-  %error ERROR_READ_USING_HUFFMAN_TREE_NEEDS_ADJACENT_BITBUF
-  times -1 nop
-%endif
-		xchg ax, [bp+gsmall.bitbuf]  ; AL := bitbuf; AH := bitbuf_bits_remaining; save old AX to [bp+gsmall.bitbuf].
+%define IS_ADJACENT_BITBUF 1
+		xchg ax, GSMALL(bitbuf)  ; AL := bitbuf; AH := bitbuf_bits_remaining; save old AX to GSMALL(bitbuf).
 .next_node:
 %if (LEAF_PTR>=-0x80 && LEAF_PTR<=0x7f) || (LEAF_PTR>=0xff80 && LEAF_PTR<=0xffff)
 		cmp word [bx], strict byte LEAF_PTR&0xff
@@ -680,7 +677,7 @@ read_using_huffman_tree:
 		mov bx, [bx]
 		jmp short .next_node
 .done:
-		xchg [bp+gsmall.bitbuf], ax  ; Save to bitbuf and bitbuf_bits_remaining; restore AX from [bp+gsmall.bitbuf].
+		xchg GSMALL(bitbuf), ax  ; Save to bitbuf and bitbuf_bits_remaining; restore AX from GSMALL(bitbuf).
 		mov ax, [bx+2]
 		ret
 
@@ -757,9 +754,15 @@ fatal_write:
 ; Output: AL is byte read.
 ; Ruins AH, FLAGS; keeps all other registers intact.
 read_byte:
+		mov ax, GSMALL(read_ptr)
+		cmp ax, GSMALL(read_limit)
+		jne short clear_read_buffer_and_read_byte.read_from_buffer
+		; Fall through to clear_read_buffer_and_read_byte.
+
+; Output: AL is byte read.
+; Ruins AH, FLAGS; keeps all other registers intact.
+clear_read_buffer_and_read_byte:
 		push bx  ; Save.
-		dec word [bp+gsmall.read_buffer_remaining]
-		jns short .read_from_buffer
 		push cx  ; Save.
 		push dx  ; Save.
 		mov ah, 0x3f  ; DOS syscall number for read using handle.
@@ -775,17 +778,20 @@ read_byte:
 		mov dx, fatal_msgs.read_error
 		mov cl, fatal_msgs.read_error.end-fatal_msgs.read_error
 		jmp short fatal
-.read_ok:	dec ax
-		js short fatal_corrupted_input  ; Unexpected EOF.
-		mov [bp+gsmall.read_buffer_remaining], ax
-		mov [bp+gsmall.read_ptr], dx  ; global.read_ptr := global.read_buffer.
+.read_ok:	test ax, ax
+		jz short fatal_corrupted_input  ; Unexpected EOF.
+		xchg ax, dx  ; AX := global.read_buffer; DX := number of bytes read. .read_from_buffer below will set word GSMALL(read_ptr) := global.read_buffer+1.
+		add dx, ax
+		mov GSMALL(read_limit), dx
 		pop dx  ; Restore.
 		pop cx  ; Restore.
-.read_from_buffer:
-		mov bx, [bp+gsmall.read_ptr]
-		mov al, [bx]
-		inc word [bp+gsmall.read_ptr]
 		pop bx  ; Restore.
+.read_from_buffer:
+		push si  ; Save.
+		xchg si, ax  ; SI := read_ptr; AX := junk.
+		lodsb  ; AL := read_ptr[0]; SI += 1.
+		mov GSMALL(read_ptr), si
+		pop si  ; Restore.
 		ret
 
 ; Output: AX is unsigned integer with the bits read; AH is always 0.
@@ -798,14 +804,11 @@ read_bits_3:
 ; Output: AX is unsigned integer with the bits read; AH is always 0.
 ; Ruins FLAGS; keeps all other registers intact.
 read_bits_max_8:
-%if gsmall.bitbuf_bits_remaining!=gsmall.bitbuf+1
-  %error ERROR_READ_BITS_MAX_8_NEEDS_ADJACENT_BITBUF
-  times -1 nop
-%endif
+%define IS_ADJACENT_BITBUF 1
 		push bx  ; Save.
 		push cx  ; Save.
 		xchg cx, ax  ; CL := AL (bit_count); CH := junk; AX := junk.
-		mov ax, [bp+gsmall.bitbuf]  ; AL := old_bitbuf; AH := bitbuf_bits_remaining. This has the adjacent bitbuf requirement.
+		mov ax, GSMALL(bitbuf)  ; AL := old_bitbuf; AH := bitbuf_bits_remaining. This has the adjacent bitbuf requirement.
 		mov bx, 1
 		cmp ah, cl  ; AH (bitbuf_bits_remaining) < CL ?
 		jnb short .read_from_bitbuf
@@ -814,23 +817,23 @@ read_bits_max_8:
 		call read_byte  ; AL (new_bitbuf) := read_byte(); AH := junk.
 		mov ah, al  ; AH := new_bitbuf.
 		shr ah, cl  ; AH (new_bitbuf) >>= bit_count.
-		mov [bp+gsmall.bitbuf], ah
+		mov GSMALL(bitbuf), ah
 		shl bx, cl
 		dec bx  ; BX := (1<<bit_count)-1. Also sets BH := 0.
 		and ax, bx  ; AX := new_bitbuf&((1<<bit_count)-1). Also sets AH := 0 because BH == 0.
 		mov bl, 8
 		sub bl, cl  ; BL := 8-bit_count.
-		mov cl, [bp+gsmall.bitbuf_bits_remaining]
+		mov cl, GSMALL(bitbuf_bits_remaining)
 		shl al, cl  ; AL := (new_bitbuf&((1<<bit_count)-1))<<bitbuf_bits_remaining.
 		or al, ch  ; AL (low byte of result) := old_bitbuf | (new_bitbuf&((1<<bit_count)-1))<<bitbuf_bits_remaining.
-		mov [bp+gsmall.bitbuf_bits_remaining], bl  ; bitbuf_bits_remaining := 8-bit_count.
+		mov GSMALL(bitbuf_bits_remaining), bl  ; bitbuf_bits_remaining := 8-bit_count.
 		jmp short .done
 .read_from_bitbuf:
 		shl bx, cl
 		dec bx  ; BX := (1<<bit_count)-1. Also sets BH := 0.
 		and ax, bx  ; Also sets AH := 0 because BH == 0.
-		shr byte [bp+gsmall.bitbuf], cl
-		sub [bp+gsmall.bitbuf_bits_remaining], cl
+		shr byte GSMALL(bitbuf), cl
+		sub GSMALL(bitbuf_bits_remaining), cl
 .done:
 		pop cx  ; Restore.
 		pop bx  ; Restore.
@@ -944,10 +947,31 @@ fatal_msgs:
 .corrupted_input: db 'corrupted input', CR, LF
 .corrupted_input.end:
 
-; -- Uninitilized arrays.
+; -- Zero-initialized and uninitilized data. Part of the memory image, but missing from the end of the DOS .com program file.
 
 absolute $
 		resb ($$-$)&3  ; Align to dd.
+
+global_initvars:  ; Global small (non-array) initialized variables, referenced using GSMALL(...) instead of [...] to save a byte per use.
+bitbuf: resb 1  ; unsigned char. Must be the second variable. Initialized to 0.
+bitbuf_bits_remaining: resb 1  ; unsigned char. Must be the first variable. Initialized to 0. Always 0..7. This must be exactly 1 byte after .bitbuf, for read_using_huffman_tree and read_bits_max_8.
+match_distance_limit: resw 1  ; unsigned short. Initialized to 0.
+global_uninitvars:  ; Global small (non-array) uninitialized variables, indexed using GSMALL(...) instead of [...] to save a byte per indexing.
+build_bit_count_histogram_and_g_ary: resw 16  ; unsigned short[16]. Used by build_huffman_tree_RUINS as temporary storage. This must be the first variable in global_uninitvars.
+read_ptr: resw 1  ; unsigned char*. Initial value arbitrary.
+read_limit: resw 1  ; unsigned char*. Initial value arbitrary.
+literal_and_len_root_ptr: resw 1  ; void**. Initial value arbitrary.
+distance_root_ptr: resw 1  ; void**. Initial value arbitrary.
+
+%if IS_HISTOGRAM_THE_FIRST_UNINITVAR && build_bit_count_histogram_and_g_ary!=global_uninitvars
+  %error ERROR_HISTOGRAM_MUST_BE_THE_FIRST_UNINITVAR
+  times -1 nop
+%endif
+%if IS_ADJACENT_BITBUF && bitbuf_bits_remaining!=bitbuf+1
+  %error ERROR_BITBUF_VARS_MUST_BE_ADJACENT
+  times -1 nop
+%endif
+
 ; This array contains multiple Huffman trees (0..3). A Huffman tree is a
 ; binary tree (and also a trie) with values in its leaves. A non-leaf node
 ; always has 2 children: child 0 and child 1. The special value
@@ -971,3 +995,6 @@ global.huffman_trees_ary: resw MAX_TREE_SIZE
 global.huffman_bit_count_ary: resb 256+32+30  ; unsigned char[256+32+30]. unsigned char[318].
 global.write_buffer: resb WRITE_RING_BUFFER_SIZE
 global.read_buffer: resb READ_BUFFER_SIZE
+global.read_buffer.end:
+
+; __END__
