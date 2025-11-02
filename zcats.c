@@ -391,7 +391,7 @@ static void build_huffman_tree(const huffman_bit_count_t *bit_count_ary_ptr, uns
   bit_count_histogram_and_g_ptr = bit_count_histogram_and_g_ary;
   *bit_count_histogram_and_g_ptr++ = total_g = 0;
   do {
-    if (total_g > 0x4000U) fatal(FATAL_CORRUPTED_INPUT);
+    if (total_g > 0x4000U) { corrupted_input: fatal(FATAL_CORRUPTED_INPUT); }
     total_g <<= 1;
     total_g += *bit_count_histogram_and_g_ptr;
     *bit_count_histogram_and_g_ptr++ = total_g << 1;
@@ -416,6 +416,7 @@ static void build_huffman_tree(const huffman_bit_count_t *bit_count_ary_ptr, uns
     } while ((code_mask_i >>= 1) != 0);
     global_huffman_trees_ary[node_idx + 1] = size_i;
   }
+  if (global_huffman_trees_ary[root_idx] == LEAF_IDX) goto corrupted_input;  /* Fail (and avoid infinite loop) if all bit_count values are 0. */
 }
 
 #ifndef main0

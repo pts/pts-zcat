@@ -658,6 +658,14 @@ build_huffman_tree_RUINS:
 		inc cx
 		dec dx
 		jnz short .next_insert
+%if LEAF_PTR==0  ; Usually true.
+		cmp [bx], dx
+%elif (LEAF_PTR>=-0x80 && LEAF_PTR<=0x7f) || (LEAF_PTR>=0xff80 && LEAF_PTR<=0xffff)
+		cmp word [bx], strict byte LEAF_PTR&0xff
+%else
+		cmp word [bx], strict word LEAF_PTR
+%endif
+		je short fatal_corrupted_input  ; Fail (and avoid infinite loop) if all bit_count values are 0.
 		ret
 
 ; Reads bits from stdin using the Huffman tree specified in BX, and decodes
